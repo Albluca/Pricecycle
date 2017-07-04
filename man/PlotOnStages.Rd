@@ -7,7 +7,7 @@
 PlotOnStages(Structure, TaxonList, Categories, PrinGraph, Net, SelThr = NULL,
   ComputeOverlaps = TRUE, RotatioMatrix, PointProjections, ExpData,
   nGenes = 10, OrderOnCat = FALSE, SmoothPoints = 1, PCACenter = FALSE,
-  MinCellPerNode = 3)
+  MinCellPerNode = 3, Title = "")
 }
 \arguments{
 \item{ExpData}{}

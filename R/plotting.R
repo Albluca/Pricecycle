@@ -23,7 +23,7 @@
 PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelThr = NULL,
                          ComputeOverlaps = TRUE, RotatioMatrix, PointProjections,
                          ExpData, nGenes = 10, OrderOnCat = FALSE, SmoothPoints = 1,
-                         PCACenter = FALSE, MinCellPerNode = 3) {
+                         PCACenter = FALSE, MinCellPerNode = 3, Title = '') {
 
   if(!is.factor(Categories)){
     stop("Categories must be a factor")
@@ -167,7 +167,8 @@ PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelTh
 
       NumReord <- as.numeric(as.character(Reordered))
 
-      boxplot(NumReord ~ Categories)
+      boxplot(NumReord ~ Categories, main = Title,
+              ylab = "Position on path")
 
     } else {
       SelPath <- AllPaths$VertNumb[sample(x = 1:nrow(AllPaths$VertNumb), size = 1),]
@@ -533,7 +534,8 @@ PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelTh
     p <- ggplot2::ggplot(data = data.frame(x=cumsum(OrderedPoints$PathLen),
                                            y=NodeOnGenes[Idx,as.numeric(ExtPath)]),
                          mapping = ggplot2::aes(x = x, y = y, color="PC")) +
-      ggplot2::labs(x = "Pseudotime", y="Gene expression", title = rownames(NodeOnGenes)[Idx]) +
+      ggplot2::labs(x = "Pseudotime", y="Gene expression",
+                    title = paste(Title, rownames(NodeOnGenes)[Idx]), sep=' / ') +
       ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
 
     RecCoord <- NULL
@@ -607,5 +609,122 @@ PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelTh
          )
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+#' Title
+#'
+#' @param WorkStruct
+#' @param Expression
+#' @param Name
+#' @param gName
+#' @param SpanVal
+#' @param CatOrder
+#'
+#' @return
+#' @export
+#'
+#' @examples
+PlotOnPseudotime <- function(WorkStruct, Expression, Name, gName, SpanVal=.3, CatOrder = NULL) {
+
+  ReOrd.Sel <- match(colnames(WorkStruct$CellExp), names(WorkStruct$CellsPT))
+  ReOrd.Sel.Mat <- match(colnames(Expression), names(WorkStruct$CellsPT))
+
+  if(!is.null(CatOrder)){
+    WorkStruct$RecCoord$Stage <- factor(as.character(WorkStruct$RecCoord$Stage), levels = CatOrder)
+  }
+
+  if(gName %in% rownames(WorkStruct$NodesExp)){
+
+    SmoothData <- data.frame(x=c(WorkStruct$CellsPT[ReOrd.Sel],
+                                 WorkStruct$CellsPT[ReOrd.Sel] + max(WorkStruct$NodesPT),
+                                 WorkStruct$CellsPT[ReOrd.Sel] - max(WorkStruct$NodesPT)),
+                             y=c(WorkStruct$CellExp[gName,],
+                                 WorkStruct$CellExp[gName,],
+                                 WorkStruct$CellExp[gName,]))
+
+    p1 <- ggplot2::ggplot(data = data.frame(x=WorkStruct$NodesPT,
+                                            y=WorkStruct$NodesExp[gName,]),
+                          mapping = ggplot2::aes(x = x, y = y, color="PC")) +
+      ggplot2::labs(x = "Pseudotime", y="Gene expression", title = paste(Name, "/", gName)) +
+      ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5)) +
+      ggplot2::geom_rect(data = WorkStruct$RecCoord,
+                         mapping = ggplot2::aes(fill=Stage, xmin=Min, xmax=Max),
+                         ymin = -Inf, ymax = Inf, inherit.aes = FALSE, alpha=.4) +
+      ggplot2::geom_smooth(data = SmoothData,
+                           mapping = ggplot2::aes(x=x, y=y, color="Data"),
+                           inherit.aes = FALSE, span = SpanVal, method = "loess") +
+      ggplot2::geom_point(data = data.frame(x=WorkStruct$CellsPT[ReOrd.Sel],
+                                            y=WorkStruct$CellExp[gName,]),
+                          mapping = ggplot2::aes(x=x, y=y, color="Data"), inherit.aes = FALSE, alpha=.5) +
+      ggplot2::geom_point() + ggplot2::geom_line() + ggplot2::scale_color_manual(values = c(Data = "blue", PC = "black")) +
+      ggplot2::coord_cartesian(xlim = c(0, max(WorkStruct$NodesPT)))
+
+  } else {
+
+    if(gName %in% rownames(Expression)){
+
+      SmoothData <- data.frame(x=c(WorkStruct$CellsPT[ReOrd.Sel.Mat],
+                                   WorkStruct$CellsPT[ReOrd.Sel.Mat] + max(WorkStruct$NodesPT),
+                                   WorkStruct$CellsPT[ReOrd.Sel.Mat] - max(WorkStruct$NodesPT)),
+                               y=c(unlist(Expression[gName,]),
+                                   unlist(Expression[gName,]),
+                                   unlist(Expression[gName,])))
+
+      p1 <- ggplot2::ggplot(data = data.frame(x=WorkStruct$CellsPT[ReOrd.Sel.Mat],
+                                              y=unlist(Expression[gName,])),
+                            mapping = ggplot2::aes(x=x, y=y, color="Data")) +
+        ggplot2::labs(x = "Pseudotime", y="Gene expression", title = paste(Name, "/", gName)) +
+        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5)) +
+        ggplot2::geom_rect(data = WorkStruct$RecCoord,
+                           mapping = ggplot2::aes(fill=Stage, xmin=Min, xmax=Max),
+                           ymin = -Inf, ymax = Inf, inherit.aes = FALSE, alpha=.4) +
+        ggplot2::geom_smooth(data = SmoothData,
+                             mapping = ggplot2::aes(x=x, y=y, color="Data"),
+                             inherit.aes = FALSE, span = SpanVal, method = "loess") +
+        ggplot2::geom_point(alpha=.5) + ggplot2::scale_color_manual(values = c(Data = "blue", PC = "black")) +
+        ggplot2::coord_cartesian(xlim = c(0, max(WorkStruct$NodesPT)))
+
+    } else {
+
+      p1 <- ggplot2::ggplot(data = data.frame(x=WorkStruct$CellsPT[ReOrd.Sel.Mat],
+                                              y=unlist(Expression[1,])),
+                            mapping = ggplot2::aes(x=x, y=y, color="Data")) +
+        ggplot2::labs(x = "Pseudotime", y="Gene expression", title = paste(Name, "/", gName)) +
+        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5)) +
+        ggplot2::geom_rect(data = WorkStruct$RecCoord,
+                           mapping = ggplot2::aes(fill=Stage, xmin=Min, xmax=Max),
+                           ymin = -Inf, ymax = Inf, inherit.aes = FALSE, alpha=.4) +
+        ggplot2::scale_color_manual(values = c(Data = "blue", PC = "black")) +
+        ggplot2::coord_cartesian(xlim = c(0, max(WorkStruct$NodesPT)))
+
+    }
+
+  }
+
+  return(p1)
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
