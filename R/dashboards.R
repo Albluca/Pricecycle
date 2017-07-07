@@ -12,6 +12,24 @@ CompareAcrossData <- function(InputList, CatOrder = NULL) {
 
   nSpans = length(InputList)
 
+  for(i in 1:length(InputList)){
+
+    WorkStruct <- InputList[[i]]$OrderedData
+
+    ValidCells <- intersect(colnames(InputList[[i]]$Expression),
+              intersect(colnames(WorkStruct$CellExp),
+                        names(WorkStruct$CellsPT))
+              )
+
+    InputList[[i]]$Expression <- InputList[[i]]$Expression[, colnames(InputList[[i]]$Expression) %in% ValidCells]
+    WorkStruct$CellExp <- WorkStruct$CellExp[, colnames(WorkStruct$CellExp) %in% ValidCells]
+    WorkStruct$CellsPT <- WorkStruct$CellsPT[names(WorkStruct$CellsPT) %in% ValidCells]
+
+    InputList[[i]]$OrderedData <- WorkStruct
+
+  }
+
+
   # Define UI
   ui <- fluidPage(
 

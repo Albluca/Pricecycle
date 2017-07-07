@@ -509,6 +509,15 @@ StageWithPeaks <- function(DataStruct,
   # })
 
   temp <- lapply(1:length(StageInfo), function(i){
+
+    if(is.null(StageInfo[[i]])){
+      return(NULL)
+    }
+
+    if(sum(rownames(NormExp) %in% StageInfo[[i]]) == 0){
+      return(NULL)
+    }
+
     pheatmap::pheatmap(NormExp[rownames(NormExp) %in% StageInfo[[i]],],
                        show_colnames = TRUE,
                        show_rownames = FALSE,

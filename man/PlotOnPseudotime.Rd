@@ -4,7 +4,7 @@
 \alias{PlotOnPseudotime}
 \title{Title}
 \usage{
-PlotOnPseudotime(WorkStruct, Expression, Name, gName, SpanVal = 0.3,
+PlotOnPseudotime(WorkStruct, Expression, Name = "", gName, SpanVal = 0.3,
   CatOrder = NULL)
 }
 \arguments{

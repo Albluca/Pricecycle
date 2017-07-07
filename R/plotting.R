@@ -634,7 +634,12 @@ PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelTh
 #' @export
 #'
 #' @examples
-PlotOnPseudotime <- function(WorkStruct, Expression, Name, gName, SpanVal=.3, CatOrder = NULL) {
+PlotOnPseudotime <- function(WorkStruct,
+                             Expression,
+                             Name = '',
+                             gName,
+                             SpanVal=.3,
+                             CatOrder = NULL) {
 
   ReOrd.Sel <- match(colnames(WorkStruct$CellExp), names(WorkStruct$CellsPT))
   ReOrd.Sel.Mat <- match(colnames(Expression), names(WorkStruct$CellsPT))
@@ -712,7 +717,6 @@ PlotOnPseudotime <- function(WorkStruct, Expression, Name, gName, SpanVal=.3, Ca
   }
 
   return(p1)
-
 
 }
 
