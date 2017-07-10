@@ -56,8 +56,7 @@ MouseGenes_GOCellCycle <- getBM(attributes = c("external_gene_name"),
 
 MouseGenes_GOCellCycle <- unlist(MouseGenes_GOCellCycle, use.names = FALSE)
 
-AllWit_Mouse <- ConvertNames("human", "mouse", unlist(StageAssociation_Whit_Ext[-c(1,2)], use.names = FALSE))
-
+# AllWit_Mouse <- ConvertNames("human", "mouse", unlist(StageAssociation_Whit_Ext[-c(1,2)], use.names = FALSE))
 
 
 
@@ -198,14 +197,235 @@ Categories <- Org_Categories[Factors>0]
 # Categories <- Categories
 
 
-Output.Kowa <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+Output.Kowa.Norm <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
                                   PCACenter = TRUE, PCAProjCenter = TRUE)
 
 
-write_rds(x = list(Analysis = Output.Kowa,
+write_rds(x = list(Analysis = Output.Kowa.Norm,
                    ExpMat = log10(GeneExprMat + 1),
                    Cats = Categories),
           path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last-Filtered.rds")
+
+
+
+
+# Kowalczyk et al - G0 (PriceCycle) ----------------------------------------------------------------
+
+Data.Kowa <- read_rds("~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.rds")
+Data.Kowa.Norm <- read_rds("~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last-Filtered.rds")
+
+# Plot data and construct auxiliary structures
+
+TargetStruct <- Data.Kowa$Analysis$PGStructs[[length(Data.Kowa$Analysis$PGStructs)]]
+Proc.Exp.Kowa <- PlotOnStages(Structure = "Circle",
+                              Categories = TargetStruct$Categories,
+                              nGenes = 2,
+                              TaxonList = TargetStruct$TaxonList[[length(TargetStruct$TaxonList)]],
+                              PrinGraph = TargetStruct$PrinGraph,
+                              Net = TargetStruct$Net[[length(TargetStruct$Net)]],
+                              SelThr = .29,
+                              ComputeOverlaps = TRUE,
+                              ExpData = TargetStruct$FiltExp,
+                              RotatioMatrix = TargetStruct$PCAData$rotation[,1:TargetStruct$nDims],
+                              PCACenter = TargetStruct$PCAData$center,
+                              PointProjections = TargetStruct$ProjPoints[[length(TargetStruct$ProjPoints)]],
+                              OrderOnCat = TRUE,
+                              SmoothPoints = 1,
+                              MinCellPerNode = 2,
+                              Title = 'Kowalczyk et al')
+
+
+
+TargetStruct <- Data.Kowa.Norm$Analysis$PGStructs[[length(Data.Kowa.Norm$Analysis$PGStructs)]]
+Proc.Exp.Kowa.Norm <- PlotOnStages(Structure = "Circle",
+                                   Categories = TargetStruct$Categories,
+                                   nGenes = 2,
+                                   TaxonList = TargetStruct$TaxonList[[length(TargetStruct$TaxonList)]],
+                                   PrinGraph = TargetStruct$PrinGraph,
+                                   Net = TargetStruct$Net[[length(TargetStruct$Net)]],
+                                   SelThr = .33,
+                                   ComputeOverlaps = TRUE,
+                                   ExpData = TargetStruct$FiltExp,
+                                   RotatioMatrix = TargetStruct$PCAData$rotation[,1:TargetStruct$nDims],
+                                   PCACenter = TargetStruct$PCAData$center,
+                                   PointProjections = TargetStruct$ProjPoints[[length(TargetStruct$ProjPoints)]],
+                                   OrderOnCat = TRUE,
+                                   SmoothPoints = 1,
+                                   MinCellPerNode = 2,
+                                   Title = 'Kowalczyk et al')
+
+
+SelStageInfo.Strong.Norm <- read_rds("~/Desktop/SelStageInfo.Strong.Norm.rds")
+SelStageInfo.Strong <- read_rds("~/Desktop/SelStageInfo.Strong.rds")
+
+
+Staged.Proc.Exp.Kowa <- StageWithPeaks(DataStruct = Data.Kowa,
+                                         ProcStruct = Proc.Exp.Kowa,
+                                         ComputeG0 = TRUE,
+                                         FiltMax = 0,
+                                         Thr = .8,
+                                         QuantSel = .8,
+                                         StageInfo = SelStageInfo.Strong.Norm,
+                                         MinNodes = 2,
+                                         Mode = 1,
+                                         G0Level = .9,
+                                         Title = 'Kowalczyk et al')
+
+
+Staged.Proc.Exp.Kowa.Norm <- StageWithPeaks(DataStruct = Data.Kowa.Norm,
+                                       ProcStruct = Proc.Exp.Kowa.Norm,
+                                       ComputeG0 = TRUE,
+                                       FiltMax = 0,
+                                       Thr = .8,
+                                       QuantSel = .8,
+                                       StageInfo = SelStageInfo.Strong.Norm,
+                                       MinNodes = 2,
+                                       Mode = 1,
+                                       G0Level = .9,
+                                       Title = 'Kowalczyk et al')
+
+
+Inf_NonG0 <- names(Staged.Proc.Exp.Kowa$CellStages_Ext[Staged.Proc.Exp.Kowa$CellStages != "G0"])
+Inf_NonG0.Norm <- names(Staged.Proc.Exp.Kowa.Norm$CellStages_Ext[Staged.Proc.Exp.Kowa.Norm$CellStages != "G0"])
+
+ToKeep <- union(Inf_NonG0, Inf_NonG0.Norm)
+ToKeep.2 <- intersect(Inf_NonG0, Inf_NonG0.Norm)
+
+
+# Load data
+
+BaseDir <- "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/"
+
+Murine_HSC_Data <- read_excel(paste(BaseDir, "GSE59114_C57BL6_GEO_all.xlsx", sep = ''))
+Murine_HSC_Samples <- read_excel(paste(BaseDir, "Table_S2.xlsx", sep = ''))
+
+CCVect <- factor(Murine_HSC_Samples$`Estimated phase`, levels = c("G0", "G1(early)", "G1(late)", "S", "G2/M"))
+names(CCVect) <- Murine_HSC_Samples$`cell ID`
+
+ProgVect <- Murine_HSC_Samples$`Progression Rank`
+names(ProgVect) <- Murine_HSC_Samples$`cell ID`
+
+SelectedSamples <- Murine_HSC_Samples$`cell ID`[Murine_HSC_Samples$population %in% c("'old LT-HSC'", "'old LT-HSC(rep)'", "'old ST-HSC'",
+                                                                                     "'old ST-HSC(rep)'", "'young LT-HSC'", "'young ST-HSC'",
+                                                                                     "'young MPP'", "'old MPP'")]
+
+SelectedSamples <- intersect(SelectedSamples, colnames(Murine_HSC_Data))
+
+Org_Categories <- CCVect[paste(SelectedSamples)]
+
+AllData <- data.matrix(Murine_HSC_Data[-1,paste(SelectedSamples)])
+rownames(AllData) <- gsub("'", '', unlist(Murine_HSC_Data[-1, 1]))
+
+
+
+AllData.1 <- AllData[,ToKeep]
+Org_Categories.1 <- Org_Categories[ToKeep]
+
+AllData.2 <- AllData[,ToKeep.2]
+Org_Categories.2 <- Org_Categories[ToKeep.2]
+
+# Org_Cat_Names <- names(Org_Categories)
+# Org_Categories <- factor(as.character(Org_Categories), levels = levels(Org_Categories)[-1])
+# names(Org_Categories) <- Org_Cat_Names
+
+Factors.1 <- scran::computeSumFactors(x = data.matrix(2^AllData.1 - 1), positive = TRUE)
+Normalized_Exp.1 <- t(t(data.matrix(2^AllData.1 - 1))/Factors.1)
+
+Factors.2 <- scran::computeSumFactors(x = data.matrix(2^AllData.2 - 1), positive = TRUE)
+Normalized_Exp.2 <- t(t(data.matrix(2^AllData.2 - 1))/Factors.2)
+
+
+GeneExprMat <- data.matrix(2^AllData.1 - 1)
+StartSet <- MouseGenes_GOCellCycle
+Categories <- Org_Categories.1
+
+
+Output.Kowa.NoG0 <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+                                       PCACenter = TRUE, PCAProjCenter = TRUE)
+
+
+write_rds(x = list(Analysis = Output.Kowa.NoG0,
+                   ExpMat = log10(GeneExprMat + 1),
+                   Cats = Categories),
+          path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.NoG0.PC.rds")
+
+
+GeneExprMat <- Normalized_Exp.1[, Factors.1>0]
+StartSet <- MouseGenes_GOCellCycle
+Categories <- Org_Categories.1[Factors.1>0]
+
+
+# GeneExprMat <- data.matrix(AllData)
+# StartSet <- MouseGenes_GOCellCycle
+# Categories <- Categories
+
+
+Output.Kowa.NoG0 <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+                                       PCACenter = TRUE, PCAProjCenter = TRUE)
+
+
+write_rds(x = list(Analysis = Output.Kowa.NoG0,
+                   ExpMat = log10(GeneExprMat + 1),
+                   Cats = Categories),
+          path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.NoG0.PC-Filtered.rds")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GeneExprMat <- data.matrix(2^AllData.2 - 1)
+StartSet <- MouseGenes_GOCellCycle
+Categories <- Org_Categories.2
+
+
+Output.Kowa.NoG0 <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+                                       PCACenter = TRUE, PCAProjCenter = TRUE)
+
+
+write_rds(x = list(Analysis = Output.Kowa.NoG0,
+                   ExpMat = log10(GeneExprMat + 1),
+                   Cats = Categories),
+          path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.NoG0.PC.2.rds")
+
+
+GeneExprMat <- Normalized_Exp.2[, Factors.2>0]
+StartSet <- MouseGenes_GOCellCycle
+Categories <- Org_Categories.2[Factors.2>0]
+
+
+# GeneExprMat <- data.matrix(AllData)
+# StartSet <- MouseGenes_GOCellCycle
+# Categories <- Categories
+
+
+Output.Kowa.NoG0 <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+                                       PCACenter = TRUE, PCAProjCenter = TRUE)
+
+
+write_rds(x = list(Analysis = Output.Kowa.NoG0,
+                   ExpMat = log10(GeneExprMat + 1),
+                   Cats = Categories),
+          path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.NoG0.PC.2-Filtered.rds")
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -302,4 +522,107 @@ write_rds(x = list(Analysis = Output.Sasa,
                    ExpMat = log10(GeneExprMat + 1),
                    Cats = Categories),
           path = "~/Google Drive/Datasets/Sasagawa et al - Murine Stem Cells (EB5 cell line)/rPG_Last-Filtered.rds")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Kowalczyk et al - G0 (comp) removed ----------------------------------------------------------------
+
+# Load data
+
+BaseDir <- "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/"
+
+Murine_HSC_Data <- read_excel(paste(BaseDir, "GSE59114_C57BL6_GEO_all.xlsx", sep = ''))
+Murine_HSC_Samples <- read_excel(paste(BaseDir, "Table_S2.xlsx", sep = ''))
+
+CCVect <- factor(Murine_HSC_Samples$`Estimated phase`, levels = c("G0", "G1(early)", "G1(late)", "S", "G2/M"))
+names(CCVect) <- Murine_HSC_Samples$`cell ID`
+
+ProgVect <- Murine_HSC_Samples$`Progression Rank`
+names(ProgVect) <- Murine_HSC_Samples$`cell ID`
+
+SelectedSamples <- Murine_HSC_Samples$`cell ID`[Murine_HSC_Samples$population %in% c("'old LT-HSC'", "'old LT-HSC(rep)'", "'old ST-HSC'",
+                                                                                     "'old ST-HSC(rep)'", "'young LT-HSC'", "'young ST-HSC'",
+                                                                                     "'young MPP'", "'old MPP'")]
+
+SelectedSamples <- intersect(SelectedSamples, colnames(Murine_HSC_Data))
+
+Org_Categories <- CCVect[paste(SelectedSamples)]
+
+AllData <- data.matrix(Murine_HSC_Data[-1,paste(SelectedSamples)])
+rownames(AllData) <- gsub("'", '', unlist(Murine_HSC_Data[-1, 1]))
+
+
+Prolif <- names(Org_Categories[Org_Categories != "G0"])
+
+
+AllData <- AllData[,Prolif]
+Org_Categories <- Org_Categories[Prolif]
+Org_Cat_Names <- names(Org_Categories)
+Org_Categories <- factor(as.character(Org_Categories), levels = levels(Org_Categories)[-1])
+names(Org_Categories) <- Org_Cat_Names
+
+
+Factors <- scran::computeSumFactors(x = data.matrix(2^AllData - 1), positive = TRUE)
+Normalized_Exp <- t(t(data.matrix(2^AllData - 1))/Factors)
+
+
+GeneExprMat <- data.matrix(2^AllData - 1)
+StartSet <- MouseGenes_GOCellCycle
+Categories <- Org_Categories
+
+
+Output.Kowa.NoG0 <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+                                  PCACenter = TRUE, PCAProjCenter = TRUE)
+
+
+write_rds(x = list(Analysis = Output.Kowa.NoG0,
+                   ExpMat = log10(GeneExprMat + 1),
+                   Cats = Categories),
+          path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.NoG0.rds")
+
+
+GeneExprMat <- Normalized_Exp[, Factors>0]
+StartSet <- MouseGenes_GOCellCycle
+Categories <- Org_Categories[Factors>0]
+
+
+# GeneExprMat <- data.matrix(AllData)
+# StartSet <- MouseGenes_GOCellCycle
+# Categories <- Categories
+
+
+Output.Kowa.NoG0 <- SelectGenesOnGraph(DataSet = GeneExprMat, StartSet = MouseGenes_GOCellCycle, Categories = Categories,
+                                  PCACenter = TRUE, PCAProjCenter = TRUE)
+
+
+write_rds(x = list(Analysis = Output.Kowa.NoG0,
+                   ExpMat = log10(GeneExprMat + 1),
+                   Cats = Categories),
+          path = "~/Google Drive/Datasets/Kowalczyk et al - Murine hematopoietic stem cells/rPG_Last.NoG0-Filtered.rds")
+
+
+
+
+
+
+
 
