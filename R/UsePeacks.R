@@ -400,7 +400,9 @@ StageWithPeaks <- function(DataStruct,
   GeneExprMat.DF <- data.frame(t(DataStruct$ExpMat[, names(ProcStruct$CellsPT)]))
   colnames(GeneExprMat.DF) <- rownames(DataStruct$ExpMat)
 
-  SelCell <- names(TaxVect)
+  # SelCell <- names(TaxVect)
+
+  SelCell <- intersect(names(TaxVect), rownames(GeneExprMat.DF))
 
   GeneExprMat.DF.Split <- split(GeneExprMat.DF[SelCell, ], TaxVect[SelCell])
   GeneExprMat.DF.Split.Mean <- lapply(GeneExprMat.DF.Split, colMeans)
