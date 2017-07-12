@@ -639,7 +639,8 @@ PlotOnPseudotime <- function(WorkStruct,
                              Name = '',
                              gName,
                              SpanVal=.3,
-                             CatOrder = NULL) {
+                             CatOrder = NULL,
+                             legend.position = "bottom") {
 
   ReOrd.Sel <- match(colnames(WorkStruct$CellExp), names(WorkStruct$CellsPT))
   ReOrd.Sel.Mat <- match(colnames(Expression), names(WorkStruct$CellsPT))
@@ -661,7 +662,7 @@ PlotOnPseudotime <- function(WorkStruct,
                                             y=WorkStruct$NodesExp[gName,]),
                           mapping = ggplot2::aes(x = x, y = y, color="PC")) +
       ggplot2::labs(x = "Pseudotime", y="Gene expression", title = paste(Name, "/", gName)) +
-      ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5)) +
+      ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5), legend.position = legend.position) +
       ggplot2::geom_rect(data = WorkStruct$RecCoord,
                          mapping = ggplot2::aes(fill=Stage, xmin=Min, xmax=Max),
                          ymin = -Inf, ymax = Inf, inherit.aes = FALSE, alpha=.4) +
@@ -689,7 +690,7 @@ PlotOnPseudotime <- function(WorkStruct,
                                               y=unlist(Expression[gName,])),
                             mapping = ggplot2::aes(x=x, y=y, color="Data")) +
         ggplot2::labs(x = "Pseudotime", y="Gene expression", title = paste(Name, "/", gName)) +
-        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5)) +
+        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5), legend.position = legend.position) +
         ggplot2::geom_rect(data = WorkStruct$RecCoord,
                            mapping = ggplot2::aes(fill=Stage, xmin=Min, xmax=Max),
                            ymin = -Inf, ymax = Inf, inherit.aes = FALSE, alpha=.4) +
@@ -705,7 +706,7 @@ PlotOnPseudotime <- function(WorkStruct,
                                               y=unlist(Expression[1,])),
                             mapping = ggplot2::aes(x=x, y=y, color="Data")) +
         ggplot2::labs(x = "Pseudotime", y="Gene expression", title = paste(Name, "/", gName)) +
-        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5)) +
+        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5), legend.position = legend.position) +
         ggplot2::geom_rect(data = WorkStruct$RecCoord,
                            mapping = ggplot2::aes(fill=Stage, xmin=Min, xmax=Max),
                            ymin = -Inf, ymax = Inf, inherit.aes = FALSE, alpha=.4) +
