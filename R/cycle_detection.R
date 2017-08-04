@@ -98,6 +98,9 @@ ProjectAndCompute <- function(DataSet, GeneSet = NULL, VarThr, nNodes, Log = TRU
   DataMat <- DataMat[!PCAFil, ]
   Categories <- Categories[!PCAFil]
 
+  Categories <- Categories[rowSums(DataMat)>0]
+  DataMat <- DataMat[rowSums(DataMat)>0, colSums(DataMat)>0]
+
   print("Estimating most likely proliferative cells")
   RankedData <- apply(DataMat, 1, rank)
 
@@ -710,12 +713,31 @@ SelectGenesOnGraph <- function(DataSet,
 
   UsedGenes[[1]] <- intersect(StartSet, rownames(DataSet))
 
-  Steps[[1]] <- ProjectAndCompute(DataSet = DataSet, GeneSet = UsedGenes[[1]], VarThr = VarThr, nNodes = nNodes,
-                                  Log = Log, Categories = Categories, Filter = Filter, OutThr = OutThr, PCAFilter = PCAFilter,
-                                  OutThrPCA = OutThrPCA, GraphType = GraphType, PlanVarLimit = PlanVarLimit, PlanVarLimitIC = PlanVarLimitIC,
-                                  MinBranDiff = MinBranDiff, InitStructNodes = InitStructNodes, ForceLasso = ForceLasso, EstProlif = EstProlif,
-                                  QuaThr = QuaThr, NonG0Cell = NonG0Cell, DipPVThr = DipPVThr, MinProlCells = MinProlCells,
-                                  PCACenter = PCACenter, PCAProjCenter = PCAProjCenter, PlotDebug = PlotDebug, PlotIntermediate = PlotIntermediate)
+  Steps[[1]] <- ProjectAndCompute(DataSet = DataSet,
+                                  GeneSet = UsedGenes[[1]],
+                                  VarThr = VarThr,
+                                  nNodes = nNodes,
+                                  Log = Log,
+                                  Categories = Categories,
+                                  Filter = Filter,
+                                  OutThr = OutThr,
+                                  PCAFilter = PCAFilter,
+                                  OutThrPCA = OutThrPCA,
+                                  GraphType = GraphType,
+                                  PlanVarLimit = PlanVarLimit,
+                                  PlanVarLimitIC = PlanVarLimitIC,
+                                  MinBranDiff = MinBranDiff,
+                                  InitStructNodes = InitStructNodes,
+                                  ForceLasso = ForceLasso,
+                                  EstProlif = EstProlif,
+                                  QuaThr = QuaThr,
+                                  NonG0Cell = NonG0Cell,
+                                  DipPVThr = DipPVThr,
+                                  MinProlCells = MinProlCells,
+                                  PCACenter = PCACenter,
+                                  PCAProjCenter = PCAProjCenter,
+                                  PlotDebug = PlotDebug,
+                                  PlotIntermediate = PlotIntermediate)
 
 
   # Select the genes that are closer to the original curve

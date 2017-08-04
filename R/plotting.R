@@ -465,10 +465,16 @@ PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelTh
       LowStages <- 1:2
     }
 
+
+    BinPercMatExt.ColNames <-  colnames(BinPercMatExt)
     while(any(BinPercMatExt[LowStages,ncol(BinPercMatExt)]) &
           all(!BinPercMatExt[setdiff(1:nrow(BinPercMatExt), LowStages),ncol(BinPercMatExt)])){
-      BinPercMatExt <- cbind(BinPercMatExt[, ncol(BinPercMatExt)], BinPercMatExt[, -ncol(BinPercMatExt)])
-      ExtPath <- c(ExtPath[length(ExtPath)], ExtPath[-length(ExtPath)])
+      BinPercMatExt <- cbind(BinPercMatExt[, ncol(BinPercMatExt)],
+                             BinPercMatExt[, -ncol(BinPercMatExt)])
+      ExtPath <- c(ExtPath[length(ExtPath)],
+                   ExtPath[-length(ExtPath)])
+      BinPercMatExt.ColNames <- c(BinPercMatExt.ColNames[length(BinPercMatExt.ColNames)],
+                                  BinPercMatExt.ColNames[-length(BinPercMatExt.ColNames)])
     }
 
     HighStages <- nrow(BinPercMatExt)
@@ -480,7 +486,11 @@ PlotOnStages <- function(Structure, TaxonList, Categories, PrinGraph, Net, SelTh
           all(!BinPercMatExt[setdiff(1:nrow(BinPercMatExt), HighStages),1])){
       BinPercMatExt <- cbind(BinPercMatExt[, -1], BinPercMatExt[, 1])
       ExtPath <- c(ExtPath[-1], ExtPath[1])
+      BinPercMatExt.ColNames <- c(BinPercMatExt.ColNames[-1],
+                                  BinPercMatExt.ColNames[1])
     }
+
+    colnames(BinPercMatExt) <- BinPercMatExt.ColNames
 
     if(Structure == 'Circle'){
       ExtPath <- c(ExtPath, ExtPath[1])

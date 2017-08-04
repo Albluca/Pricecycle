@@ -19,8 +19,8 @@ GetGenesWithPeaks <- function(DataStruct,
                               FiltMax = .2,
                               Thr = .9,
                               QuantSel = .75,
-                              SinglePeack = FALSE,
-                              Mode = "UP") {
+                              MedianCVThr = 1,
+                              StagesNames = c("G1", "S", "G2")) {
 
   WorkPG <- DataStruct$Analysis$PGStructs[[length(DataStruct$Analysis$PGStructs)]]
   TaxList <- WorkPG$TaxonList[[length(WorkPG$TaxonList)]]
@@ -34,135 +34,85 @@ GetGenesWithPeaks <- function(DataStruct,
 
   if(AllGenes){
 
-    GeneExprMat.DF <- data.frame(t(DataStruct$ExpMat[, names(ProcStruct$CellsPT)]))
-    colnames(GeneExprMat.DF) <- rownames(DataStruct$ExpMat)
+    GeneExprMat.DF <- data.frame(t(DataStruct$ExpMat[rowSums(DataStruct$ExpMat)>0, names(ProcStruct$CellsPT)]))
+    colnames(GeneExprMat.DF) <- rownames(DataStruct$ExpMat)[rowSums(DataStruct$ExpMat)>0]
 
     SelCell <- names(TaxVect)
 
     GeneExprMat.DF.Split <- split(GeneExprMat.DF[SelCell, ], TaxVect[SelCell])
     GeneExprMat.DF.Split.Mean <- lapply(GeneExprMat.DF.Split, colMeans)
+    GeneExprMat.DF.Split.Sd <- lapply(GeneExprMat.DF.Split, function(x){apply(x, 2, sd)})
 
     GeneExprMat.DF.Split.Mean.Bind <- sapply(GeneExprMat.DF.Split.Mean, cbind)
+    GeneExprMat.DF.Split.Sd.Bind <- sapply(GeneExprMat.DF.Split.Sd, cbind)
+
     rownames(GeneExprMat.DF.Split.Mean.Bind) <- colnames(GeneExprMat.DF)
     colnames(GeneExprMat.DF.Split.Mean.Bind) <- names(GeneExprMat.DF.Split.Mean)
+
+    rownames(GeneExprMat.DF.Split.Sd.Bind) <- colnames(GeneExprMat.DF)
+    colnames(GeneExprMat.DF.Split.Sd.Bind) <- names(GeneExprMat.DF.Split.Sd)
 
     Reord <- ProcStruct$ExtPath[-length(ProcStruct$ExtPath)]
     Reord <- Reord[Reord %in% colnames(GeneExprMat.DF.Split.Mean.Bind)]
 
     GeneExprMat.DF.Split.Mean.Bind <- GeneExprMat.DF.Split.Mean.Bind[,Reord]
+    GeneExprMat.DF.Split.Sd.Bind <- GeneExprMat.DF.Split.Sd.Bind[,Reord]
+
+    MedianCV <- apply(GeneExprMat.DF.Split.Sd.Bind/GeneExprMat.DF.Split.Mean.Bind, 1, median, na.rm=TRUE)
 
     # NormExp <- ProcStruct$NodesExp
 
     NormExp <- GeneExprMat.DF.Split.Mean.Bind
-    dim(NormExp)
+    # dim(NormExp)
 
   } else {
 
     NormExp <- ProcStruct$NodesExp
     colnames(NormExp) <- ProcStruct$ExtPath
 
+    MedianCV <- rep(0, nrow(ProcStruct$NodesExp))
+
   }
 
 
-
+  MedianCV <- MedianCV[rowSums(NormExp>0) > MinNodes]
   NormExp <- NormExp[rowSums(NormExp>0) > MinNodes, ]
-  dim(NormExp)
+
+  # dim(NormExp)
 
   SDVect <- apply(NormExp, 1, sd)
-  NormExp <- NormExp[SDVect > quantile(SDVect, QuantSel),]
-  dim(NormExp)
 
+  SDVect[is.na(SDVect)] <- 0
+  MedianCV[is.na(MedianCV)] <- 0
 
-  # CorGenes <- cor(t(NormExp))
-  #
-  # CorGenes[CorGenes < .95] <- 0
-  # CorGenes[CorGenes >= .95] <- 1
-  #
-  # CorGenes <- CorGenes[rowSums(CorGenes) > 1, colSums(CorGenes) > 1]
-  #
-  # dim(CorGenes)
-  #
-  # pheatmap::pheatmap(CorGenes)
-  #
-  # Modules <- apply(CorGenes==1, 1, which)
-  #
-  # Modules <- Modules[unlist(lapply(Modules, length)) > 3]
-  #
-  # ModMat <- lapply(Modules, function(x){rownames(CorGenes) %in% x})
-  #
-  # ModMat <- t(sapply(ModMat, cbind))
-  #
-  # dim(ModMat)
+  NormExp <- NormExp[SDVect > quantile(SDVect, QuantSel) & MedianCV < MedianCVThr,]
 
   NormExp[NormExp <= FiltMax] <- 0
   NormExp <- NormExp[rowSums(NormExp>0) > MinNodes, ]
 
-  if(Mode == "UP"){
-    Min <- apply(NormExp, 1, min)
-    Range <- apply(NormExp, 1, max) - Min
-    NormExp.Bin <- (NormExp > Min + Range*Thr)
-  } else {
-    Min <- apply(NormExp, 1, min)
-    Range <- apply(NormExp, 1, max) - Min
-    NormExp.Bin <- (NormExp < Min + Range*Thr)
+  NormExp <- (NormExp - apply(NormExp, 1, min))/(apply(NormExp, 1, max) - apply(NormExp, 1, min))
+
+  pheatmap::pheatmap(NormExp, cluster_cols = FALSE)
+
+  FiltStagesOnNodes <- list()
+
+  for(stg in StagesNames){
+    Selected <- ProcStruct$StageOnNodes[grep(stg, names(ProcStruct$StageOnNodes))]
+    FiltStagesOnNodes[[stg]] <- unlist(Selected, use.names = FALSE)
+    names(FiltStagesOnNodes[[stg]]) <- unlist(lapply(Selected, names), use.names = FALSE)
   }
 
 
-  NormExp.Bin <- NormExp.Bin[apply(NormExp.Bin, 1, any), ]
+  StageGenes <- lapply(FiltStagesOnNodes, function(x){
 
-  pheatmap::pheatmap(1*NormExp.Bin[order(rowMeans(t(t(NormExp.Bin)*1:ncol(NormExp.Bin)))), ],
-                     cluster_cols = FALSE, cluster_rows = FALSE)
+    SelX <- intersect(names(x), colnames(NormExp))
+    UnSelX <- setdiff(colnames(NormExp), SelX)
 
-  if(SinglePeack){
-
-    SinglePk_UP <- lapply(apply(NormExp.Bin, 1, which), function(x){
-      if(all(min(x):max(x) %in% x)){
-        return(TRUE)
-      } else {
-        return(FALSE)
-      }
-    })
-
-    SinglePk_DOWN <- lapply(apply(!NormExp.Bin, 1, which), function(x){
-      if(all(min(x):max(x) %in% x)){
-        return(TRUE)
-      } else {
-        return(FALSE)
-      }
-    })
-
-    Selected <- c(names(which(unlist(SinglePk_DOWN))),
-                  names(which(unlist(SinglePk_UP))))
-
-  } else {
-
-    Selected <- rownames(NormExp.Bin)
-
-  }
-
-
-
-  Selected <- unique(Selected)
-
-  PlotMat <- 1*NormExp.Bin[Selected,]
-
-  PlotMat.Numb <- t(t(PlotMat)*1:ncol(PlotMat))
-  PlotMat.Numb[PlotMat.Numb == 0] <- NA
-
-  pheatmap::pheatmap(PlotMat[order(apply(PlotMat.Numb, 1, median, na.rm=TRUE)),], show_colnames = FALSE,
-                     show_rownames = FALSE, cluster_cols = FALSE, cluster_rows = FALSE)
-
-  barplot(colSums(NormExp.Bin[Selected,]))
-
-  StageGenes <- lapply(ProcStruct$StageOnNodes, function(x){
-    SelX <- intersect(names(x), colnames(NormExp.Bin))
     if(length(SelX)>0){
       if(length(SelX)==1){
-        NormExp.Bin[Selected, SelX]
+        NormExp[, UnSelX] < Thr & NormExp[, SelX] > Thr
       } else {
-        apply(NormExp.Bin[Selected, SelX], 1, function(y){
-          any(which(y))
-        })
+        apply(NormExp[, UnSelX] < Thr, 1, all) & apply(NormExp[, SelX] > Thr, 1, any)
       }
     } else {
       NA
@@ -170,13 +120,82 @@ GetGenesWithPeaks <- function(DataStruct,
 
   })
 
-  StageGenes.Names <- lapply(StageGenes, function(x){
+  StageGenes.Names.UP <- lapply(StageGenes, function(x){
     names(which(x))
   })
 
-  barplot(unlist(lapply(StageGenes.Names, length)), las = 2, horiz = FALSE)
 
-  return(StageGenes.Names)
+  tt <- lapply(as.list(1:length(StageGenes.Names.UP)), function(i) {
+
+    if(length(StageGenes.Names.UP[[i]])>1){
+      pheatmap::pheatmap(NormExp[StageGenes.Names.UP[[i]],], cluster_cols = FALSE, main = names(StageGenes.Names.UP)[i])
+    }
+
+    if(length(StageGenes.Names.UP[[i]])==1){
+      pheatmap::pheatmap(NormExp[StageGenes.Names.UP[[i]],], cluster_cols = FALSE, cluster_rows = FALSE, main = names(StageGenes.Names.UP)[i])
+    }
+
+  })
+
+  barplot(unlist(lapply(StageGenes.Names.UP, length)), las = 2, horiz = FALSE, main = "Up genes")
+
+
+
+
+
+
+
+
+
+
+
+
+
+  StageGenes <- lapply(FiltStagesOnNodes, function(x){
+
+    SelX <- intersect(names(x), colnames(NormExp))
+    UnSelX <- setdiff(colnames(NormExp), SelX)
+
+    if(length(SelX)>0){
+      if(length(SelX)==1){
+        NormExp[, UnSelX] > 1 - Thr & NormExp[, SelX] < 1 - Thr
+      } else {
+        apply(NormExp[, UnSelX] > 1- Thr, 1, all) & apply(NormExp[, SelX] < 1 - Thr, 1, any)
+      }
+    } else {
+      NA
+    }
+
+  })
+
+  StageGenes.Names.DOWN <- lapply(StageGenes, function(x){
+    names(which(x))
+  })
+
+
+  tt <- lapply(as.list(1:length(StageGenes.Names.DOWN)), function(i) {
+
+    if(length(StageGenes.Names.DOWN[[i]])>1){
+      pheatmap::pheatmap(NormExp[StageGenes.Names.DOWN[[i]],], cluster_cols = FALSE, main = names(StageGenes.Names.DOWN)[i])
+    }
+
+    if(length(StageGenes.Names.DOWN[[i]])==1){
+      pheatmap::pheatmap(NormExp[StageGenes.Names.DOWN[[i]],], cluster_cols = FALSE, cluster_rows = FALSE, main = names(StageGenes.Names.DOWN)[i])
+    }
+
+  })
+
+  barplot(unlist(lapply(StageGenes.Names.DOWN, length)), las = 2, horiz = FALSE, main = "DOWN genes")
+
+
+
+
+
+
+
+
+
+  return(list(UP = StageGenes.Names.UP, DOWN = StageGenes.Names.DOWN))
 
 }
 
@@ -375,13 +394,16 @@ FitStagesCirc <- function(StageMatrix, NodePenalty, Mode = 1) {
 #' @examples
 StageWithPeaks <- function(DataStruct,
                            ProcStruct,
-                           StageInfo,
+                           StageInfo.UP,
+                           StageInfo.DOWN,
                            ComputeG0 = TRUE,
+                           CCGenes = NULL,
                            MinNodes = 2,
                            FiltMax = .2,
                            Thr = .9,
                            QuantSel = .75,
-                           G0Level = 1,
+                           MedianCVThr = 1,
+                           G0Level = .6,
                            # SinglePeack = FALSE,
                            Mode = 1,
                            Title = ''
@@ -396,7 +418,6 @@ StageWithPeaks <- function(DataStruct,
     TaxVect[ TaxList[[j]] ] <<- j
   })
 
-
   GeneExprMat.DF <- data.frame(t(DataStruct$ExpMat[, names(ProcStruct$CellsPT)]))
   colnames(GeneExprMat.DF) <- rownames(DataStruct$ExpMat)
 
@@ -406,157 +427,227 @@ StageWithPeaks <- function(DataStruct,
 
   GeneExprMat.DF.Split <- split(GeneExprMat.DF[SelCell, ], TaxVect[SelCell])
   GeneExprMat.DF.Split.Mean <- lapply(GeneExprMat.DF.Split, colMeans)
+  GeneExprMat.DF.Split.Sd <- lapply(GeneExprMat.DF.Split, function(x){apply(x, 2, sd)})
 
   GeneExprMat.DF.Split.Mean.Bind <- sapply(GeneExprMat.DF.Split.Mean, cbind)
+  GeneExprMat.DF.Split.Sd.Bind <- sapply(GeneExprMat.DF.Split.Sd, cbind)
+
   rownames(GeneExprMat.DF.Split.Mean.Bind) <- colnames(GeneExprMat.DF)
   colnames(GeneExprMat.DF.Split.Mean.Bind) <- names(GeneExprMat.DF.Split.Mean)
+
+  rownames(GeneExprMat.DF.Split.Sd.Bind) <- colnames(GeneExprMat.DF)
+  colnames(GeneExprMat.DF.Split.Sd.Bind) <- names(GeneExprMat.DF.Split.Sd)
 
   Reord <- ProcStruct$ExtPath[-length(ProcStruct$ExtPath)]
   Reord <- Reord[Reord %in% colnames(GeneExprMat.DF.Split.Mean.Bind)]
 
   GeneExprMat.DF.Split.Mean.Bind <- GeneExprMat.DF.Split.Mean.Bind[,Reord]
+  GeneExprMat.DF.Split.Sd.Bind <- GeneExprMat.DF.Split.Sd.Bind[,Reord]
+
+  MedianCV <- apply(GeneExprMat.DF.Split.Sd.Bind/GeneExprMat.DF.Split.Mean.Bind, 1, median, na.rm=TRUE)
 
   # NormExp <- ProcStruct$NodesExp
 
   NormExp <- GeneExprMat.DF.Split.Mean.Bind
   dim(NormExp)
 
+  MedianCV <- MedianCV[rowSums(NormExp>0) > MinNodes]
   NormExp <- NormExp[rowSums(NormExp>0) > MinNodes, ]
   dim(NormExp)
 
   SDVect <- apply(NormExp, 1, sd)
-  NormExp <- NormExp[SDVect > quantile(SDVect, QuantSel),]
+  SDVect[is.na(SDVect)] <- 0
+  MedianCV[is.na(MedianCV)] <- 0
+
+  NormExp <- NormExp[SDVect > quantile(SDVect, QuantSel) & MedianCV < MedianCVThr,]
   dim(NormExp)
 
   NormExp[NormExp <= FiltMax] <- 0
   NormExp <- NormExp[rowSums(NormExp>0) > MinNodes, ]
 
+  AVGenAct_NoNorm <- apply(NormExp[rownames(NormExp) %in% CCGenes,], 2, mean)
+  AVGenAct_NoNorm.Comp <- apply(NormExp[!(rownames(NormExp) %in% CCGenes),], 2, mean)
 
-#
-#   pheatmap::pheatmap(NormExp[rownames(NormExp) %in% G1.buet,],
-#                      cluster_cols = FALSE,
-#                      cluster_rows = FALSE)
-
-
-  # if(Mode == "UP"){
-  #   Min <- apply(NormExp, 1, min)
-  #   Range <- apply(NormExp, 1, max) - Min
-  #   NormExp.Bin <- (NormExp > Min + Range*Thr)
-  # } else {
-  #   Min <- apply(NormExp, 1, min)
-  #   Range <- apply(NormExp, 1, max) - Min
-  #   NormExp.Bin <- (NormExp < Min + Range*Thr)
-  # }
-
-  Min <- apply(NormExp, 1, min)
-  Max <- apply(NormExp, 1, max)
-  # NormExp.Norm <- (NormExp - Min)/(Max-Min)
-
-  # NormExp.Bin <- NormExp.Bin[apply(NormExp.Bin, 1, any), ]
-  #
-  # pheatmap::pheatmap(1*NormExp.Bin[order(rowMeans(t(t(NormExp.Bin)*1:ncol(NormExp.Bin)))), ],
-  #                    cluster_cols = FALSE, cluster_rows = FALSE)
-
-  pheatmap::pheatmap(NormExp, cluster_cols = FALSE, cluster_rows = FALSE)
+  NormExp <- (NormExp - apply(NormExp, 1, min))/(apply(NormExp, 1, max) - apply(NormExp, 1, min))
 
 
-  # if(SinglePeack){
-  #
-  #   SinglePk_UP <- lapply(apply(NormExp.Bin, 1, which), function(x){
-  #     if(all(min(x):max(x) %in% x)){
-  #       return(TRUE)
-  #     } else {
-  #       return(FALSE)
-  #     }
-  #   })
-  #
-  #   SinglePk_DOWN <- lapply(apply(!NormExp.Bin, 1, which), function(x){
-  #     if(all(min(x):max(x) %in% x)){
-  #       return(TRUE)
-  #     } else {
-  #       return(FALSE)
-  #     }
-  #   })
-  #
-  #   Selected <- c(names(which(unlist(SinglePk_DOWN))),
-  #                 names(which(unlist(SinglePk_UP))))
-  #
-  # } else {
-  #
-  #   Selected <- rownames(NormExp.Bin)
-  #
-  # }
-  #
-  #
-  #
-  # Selected <- unique(Selected)
-  #
-  # PlotMat <- 1*NormExp.Bin[Selected,]
-  #
-  # PlotMat.Numb <- t(t(PlotMat)*1:ncol(PlotMat))
-  # PlotMat.Numb[PlotMat.Numb == 0] <- NA
-  #
-  # pheatmap::pheatmap(PlotMat[order(apply(PlotMat.Numb, 1, median, na.rm=TRUE)),], show_colnames = FALSE,
-  #                    show_rownames = FALSE, cluster_cols = FALSE, cluster_rows = FALSE)
-  #
-  # barplot(colSums(NormExp.Bin[Selected,]))
 
-  # temp <- lapply(1:length(StageInfo), function(i){
-  #   pheatmap::pheatmap(PlotMat[rownames(PlotMat) %in% StageInfo[[i]],],
-  #                      show_colnames = TRUE,
-  #                      show_rownames = FALSE,
-  #                      cluster_cols = FALSE,
-  #                      cluster_rows = FALSE,
-  #                      main = names(StageInfo)[i])
-  # })
 
-  temp <- lapply(1:length(StageInfo), function(i){
 
-    if(is.null(StageInfo[[i]])){
+
+
+
+
+  temp <- lapply(1:length(StageInfo.UP), function(i){
+
+    if(is.null(StageInfo.UP[[i]])){
       return(NULL)
     }
 
-    if(sum(rownames(NormExp) %in% StageInfo[[i]]) == 0){
+    if(sum(rownames(NormExp) %in% StageInfo.UP[[i]]) == 0){
       return(NULL)
     }
 
-    pheatmap::pheatmap(NormExp[rownames(NormExp) %in% StageInfo[[i]],],
+    pheatmap::pheatmap(1*NormExp[rownames(NormExp) %in% StageInfo.UP[[i]],],
                        show_colnames = TRUE,
                        show_rownames = FALSE,
                        cluster_cols = FALSE,
-                       cluster_rows = FALSE,
-                       main = names(StageInfo)[i])
+                       cluster_rows = TRUE,
+                       main = paste(names(StageInfo.UP)[i], "UP"))
   })
 
-  # PercOnNodes <- sapply(StageInfo, function(x){
-  #   colSums(PlotMat[rownames(PlotMat) %in% x,])/sum(rownames(PlotMat) %in% x)
-  # })
 
-  # PercOnNodes <- sapply(StageInfo, function(x){
-  #   apply(NormExp.Norm[rownames(NormExp.Norm) %in% x,], 2, mean)
-  # })
 
-  PercOnNodes <- sapply(StageInfo, function(x){
-    apply(NormExp[rownames(NormExp) %in% x,], 2, sum)
+
+
+
+
+
+  temp <- lapply(1:length(StageInfo.DOWN), function(i){
+
+    if(is.null(StageInfo.DOWN[[i]])){
+      return(NULL)
+    }
+
+    if(sum(rownames(NormExp) %in% StageInfo.DOWN[[i]]) == 0){
+      return(NULL)
+    }
+
+    pheatmap::pheatmap(1*NormExp[rownames(NormExp) %in% StageInfo.DOWN[[i]],],
+                       show_colnames = TRUE,
+                       show_rownames = FALSE,
+                       cluster_cols = FALSE,
+                       cluster_rows = TRUE,
+                       main = paste(names(StageInfo.DOWN)[i], "DOWN"))
   })
+
+
+
+
+
+  # PercOnNodes.UP <- sapply(StageInfo.UP, function(x){
+  #   # apply(NormExp.Mod[rownames(NormExp.Mod) %in% intersect(x, Selected),], 2, sum)
+  #   # apply(NormExp[rownames(NormExp) %in% x,], 2, sum)
+  #   tMat <- NormExp[rownames(NormExp) %in% x,]
+  #   tMat[tMat < Thr] <- 0
+  #   apply(tMat, 2, mean)
+  # })
+  #
+  #
+  # PercOnNodes.DOWN <- sapply(StageInfo.DOWN, function(x){
+  #   # apply(NormExp.Mod[rownames(NormExp.Mod) %in% intersect(x, Selected),], 2, sum)
+  #   # apply(NormExp[rownames(NormExp) %in% x,], 2, sum)
+  #   tMat <- 1 - NormExp[rownames(NormExp) %in% x,]
+  #   tMat[tMat < Thr] <- 0
+  #   apply(tMat, 2, mean)
+  # })
+
+
+  PercOnNodes <- sapply(1:length(StageInfo.UP), function(i){
+
+    if(sum(rownames(NormExp) %in% union(StageInfo.UP[[i]], StageInfo.DOWN[[i]])) <= 1){
+      return(rep(0, ncol(NormExp)))
+    }
+
+    tMat.UP <- NormExp[rownames(NormExp) %in% StageInfo.UP[[i]],]
+    tMat.UP[tMat.UP < Thr] <- 0
+
+    tMat.DOWN <- 1 - NormExp[rownames(NormExp) %in% StageInfo.DOWN[[i]],]
+    tMat.DOWN[tMat.DOWN < Thr] <- 0
+
+    CombMat <- rbind(tMat.DOWN, tMat.UP)
+    colnames(CombMat) <- colnames(tMat.UP)
+
+    apply(CombMat, 2, mean)
+  })
+
+  colnames(PercOnNodes) <- names(StageInfo.UP)
+
+  barplot(t(PercOnNodes), beside = TRUE)
+
+  PercOnNodes <- PercOnNodes[, !apply(PercOnNodes == 0, 2, all)]
+
+  if(ComputeG0){
+
+    AVGenAct <- apply(NormExp[rownames(NormExp) %in% CCGenes,], 2, mean)
+    # AVGenAct.Comp <- apply(NormExp[!(rownames(NormExp) %in% CCGenes),], 2, mean)
+
+    barplot(rbind(AVGenAct_NoNorm, AVGenAct_NoNorm.Comp), beside = TRUE)
+    abline(h = G0Level)
+
+    ToKeep <- AVGenAct_NoNorm > G0Level
+
+    PercOnNodes.Comb <- t(PercOnNodes)
+    PercOnNodes.Comb[] <- 0
+    PercOnNodes.Comb[,ToKeep] <- t(PercOnNodes[ToKeep, ])/apply(PercOnNodes[ToKeep, ], 2, quantile, .9)
+
+    # G0Val <- min(apply(PercOnNodes.Comb[,ToKeep], 2, max))
+    # PercOnNodes.Comb <- rbind(G0Val*(!ToKeep), PercOnNodes.Comb)
+
+    # PercOnNodes.Comb <- rbind((1 - AVGenAct)*(!ToKeep), PercOnNodes.Comb)
+
+    PercOnNodes.Comb <- rbind(
+      (1 - AVGenAct)/quantile(1 - AVGenAct, .9),
+      PercOnNodes.Comb
+    )
+
+    PercOnNodes.Comb[1, ToKeep] <- 0
+    rownames(PercOnNodes.Comb)[1] <- "G0"
+
+    barplot(PercOnNodes.Comb, beside = TRUE)
+
+    OutPos <- apply(PercOnNodes.Comb[, ToKeep], 1, scater::isOutlier) %>%
+      apply(., 1, any)
+
+    OutVect <- ToKeep
+    OutVect[OutVect] <- OutPos
+
+    NonOutMax <- apply(PercOnNodes.Comb[-1,!OutVect & ToKeep], 1, max)
+    NonOutMax[NonOutMax == 0] <- 1
+
+    NormVect <- sapply(1:length(OutVect), function(i){
+      if(!OutVect[i]){
+        return(1)
+      } else {
+        return(max(PercOnNodes.Comb[-1, i]/NonOutMax))
+      }
+    })
+
+    PercOnNodes.Comb <- t(t(PercOnNodes.Comb)/NormVect)
+
+    barplot(PercOnNodes.Comb, beside = TRUE)
+
+  } else {
+
+    PercOnNodes.Comb <- t(PercOnNodes)/apply(PercOnNodes, 2, quantile, .9)
+
+    barplot(PercOnNodes.Comb, beside = TRUE)
+
+  }
+
+
 
   # G0Perc <- colSums(!PlotMat[rownames(PlotMat) %in% unlist(StageInfo, use.names = FALSE),])/sum(rownames(PlotMat) %in% unlist(StageInfo, use.names = FALSE))
 
-  PercOnNodes <- t(PercOnNodes)
+  # PercOnNodes.UP <- t(PercOnNodes.UP)/apply(PercOnNodes.UP, 2, quantile, .9)
+  # PercOnNodes.DOWN <- t(PercOnNodes.DOWN)/apply(PercOnNodes.DOWN, 2, quantile, .9)
+  #
+  # PercOnNodes.UP[is.na(PercOnNodes.UP)] <- 0
+  # PercOnNodes.DOWN[is.na(PercOnNodes.DOWN)] <- 0
 
-  PercOnNodes <- PercOnNodes/apply(PercOnNodes, 1, mean)
+  # barplot(PercOnNodes, beside = TRUE)
 
-  if(ComputeG0){
-    G0Perc <- rep(G0Level, ncol(PercOnNodes))
-    G0Perc[G0Perc < 0] <- 0
 
-    PercOnNodes <- rbind(G0Perc, PercOnNodes)
-    rownames(PercOnNodes)[1] <- "G0"
-  }
+
+
+  # PercOnNodes.Comb <- t(PercOnNodes)
+
+
+  # PercOnNodes <- PercOnNodes + min(PercOnNodes)
 
   # PercOnNodes[PercOnNodes > 1] <- 1
 
-  barplot(PercOnNodes, beside = TRUE)
+
 
   # LowHigh <- apply(PercOnNodes, 1, quantile, .7)
   #
@@ -570,11 +661,11 @@ StageWithPeaks <- function(DataStruct,
   #
   # })
 
-  pheatmap::pheatmap(PercOnNodes,
+  pheatmap::pheatmap(PercOnNodes.Comb,
                      cluster_cols = FALSE,
                      cluster_rows = FALSE)
 
-  apply(PercOnNodes, 2, which.max)
+  apply(PercOnNodes.Comb, 2, which.max)
 
   # PercOnNodes[PercOnNodes < .02] <- 0
   #
@@ -584,27 +675,27 @@ StageWithPeaks <- function(DataStruct,
   #
   # apply(PercOnNodes, 2, which.max)
 
-  BestStaging <- AssociteNodes(PerMat = PercOnNodes, Mode = Mode)
+  BestStaging <- AssociteNodes(PerMat = PercOnNodes.Comb, Mode = Mode)
 
-  TB <- apply(BestStaging, 2, function(x){table(factor(x, levels = 1:nrow(PercOnNodes)))})
+  TB <- apply(BestStaging, 2, function(x){table(factor(x, levels = 1:nrow(PercOnNodes.Comb)))})
 
-  rownames(TB) <- rownames(PercOnNodes)
+  rownames(TB) <- rownames(PercOnNodes.Comb)
 
   pheatmap::pheatmap(TB, cluster_cols = FALSE, cluster_rows = FALSE,
                      main = Title)
 
   BestTB <- TB
 
-  InferredStages <- rownames(PercOnNodes)[apply(TB, 2, which.max)]
-  names(InferredStages) <- colnames(PercOnNodes)
+  InferredStages <- rownames(PercOnNodes.Comb)[apply(TB, 2, which.max)]
+  names(InferredStages) <- colnames(PercOnNodes.Comb)
 
   CellStages <- InferredStages[paste(TaxVect)]
   names(CellStages) <- names(TaxVect)
 
   if(ComputeG0){
-    CellStages <- factor(CellStages, levels = c('G0', names(StageInfo)))
+    CellStages <- factor(CellStages, levels = c('G0', names(StageInfo.UP)))
   } else {
-    CellStages <- factor(CellStages, levels = names(StageInfo))
+    CellStages <- factor(CellStages, levels = names(StageInfo.UP))
   }
 
 
@@ -616,12 +707,14 @@ StageWithPeaks <- function(DataStruct,
 
   print(TB1/rowSums(TB1))
 
-  pheatmap::pheatmap(TB1/rowSums(TB1), cluster_rows = FALSE, cluster_cols = FALSE, main = Title)
+  pheatmap::pheatmap(TB1/rowSums(TB1), cluster_rows = FALSE, cluster_cols = FALSE, main = Title,
+                     color = rev(heat.colors(25)))
 
   if(nrow(TB1) > 1){
 
     print(t(t(TB1)/colSums(TB1)))
-    pheatmap::pheatmap(t(t(TB1)/colSums(TB1)), cluster_rows = FALSE, cluster_cols = FALSE, main = Title)
+    pheatmap::pheatmap(t(t(TB1)/colSums(TB1)), cluster_rows = FALSE, cluster_cols = FALSE, main = Title,
+                       color = rev(heat.colors(25)))
 
   }
 
@@ -672,12 +765,14 @@ StageWithPeaks <- function(DataStruct,
 
   print(TB2/rowSums(TB2))
 
-  pheatmap::pheatmap(TB2/rowSums(TB2), cluster_rows = FALSE, cluster_cols = FALSE, main = Title)
+  pheatmap::pheatmap(TB2/rowSums(TB2), cluster_rows = FALSE, cluster_cols = FALSE, main = Title,
+                     color = rev(heat.colors(25)))
 
   if(nrow(TB2) > 1){
 
     print(t(t(TB2)/colSums(TB2)))
-    pheatmap::pheatmap(t(t(TB2)/colSums(TB2)), cluster_rows = FALSE, cluster_cols = FALSE, main = Title)
+    pheatmap::pheatmap(t(t(TB2)/colSums(TB2)), cluster_rows = FALSE, cluster_cols = FALSE, main = Title,
+                       color = rev(heat.colors(25)))
 
 
   }
@@ -687,6 +782,7 @@ StageWithPeaks <- function(DataStruct,
               Extinferred = CombStages,
               CellStages = CellStages,
               CellStages_Ext = CellStages_Ext,
+              StageMat = PercOnNodes.Comb,
               TB1 = TB1, TB2 = TB2,
               BestTB = BestTB))
 
