@@ -24,19 +24,46 @@
 #' @param ForceLasso
 #' @param DipPVThr
 #' @param MinProlCells
+#' @param PCAFilter
+#' @param OutThrPCA
+#' @param EstProlif
+#' @param QuaThr
+#' @param NonG0Cell
+#' @param PCACenter
+#' @param PCAProjCenter
+#' @param PlotDebug
+#' @param PlotIntermediate
 #'
 #' @return
 #' @export
 #'
 #' @examples
 #'
-ProjectAndCompute <- function(DataSet, GeneSet = NULL, VarThr, nNodes, Log = TRUE, Categories = NULL,
-                              Filter = TRUE, OutThr = 5, PCAFilter = FALSE, OutThrPCA = 5,
-                              GraphType = 'Lasso', PlanVarLimit = .9,
-                              PlanVarLimitIC = NULL, MinBranDiff = 2, InitStructNodes = 15,
-                              ForceLasso = FALSE, EstProlif = "MeanPerc", QuaThr = .5,
-                              NonG0Cell = NULL, DipPVThr = 1e-3, MinProlCells = 20, PCACenter = TRUE, PCAProjCenter = FALSE,
-                              PlotDebug = FALSE, PlotIntermediate = FALSE){
+ProjectAndCompute <- function(DataSet,
+                              GeneSet = NULL,
+                              VarThr,
+                              nNodes = 30,
+                              Log = TRUE,
+                              Categories = NULL,
+                              Filter = TRUE,
+                              OutThr = 5,
+                              PCAFilter = FALSE,
+                              OutThrPCA = 5,
+                              GraphType = 'Circle',
+                              PlanVarLimit = .9,
+                              PlanVarLimitIC = NULL,
+                              MinBranDiff = 2,
+                              InitStructNodes = 15,
+                              ForceLasso = FALSE,
+                              EstProlif = "MeanPerc",
+                              QuaThr = .5,
+                              NonG0Cell = NULL,
+                              DipPVThr = 1e-3,
+                              MinProlCells = 20,
+                              PCACenter = TRUE,
+                              PCAProjCenter = FALSE,
+                              PlotDebug = FALSE,
+                              PlotIntermediate = FALSE){
 
   if(is.null(PlanVarLimitIC)){
     PlanVarLimitIC <- PlanVarLimit + .5*(1-PlanVarLimit)
@@ -188,344 +215,34 @@ ProjectAndCompute <- function(DataSet, GeneSet = NULL, VarThr, nNodes, Log = TRU
 
   }
 
-  print("Transforming Data")
+
+  nDims <- min(dim(DataMat))
+
+  print("Transforming data using PCA")
 
   PCAData <- prcomp(DataMat, retx = TRUE, center = PCACenter, scale.=FALSE)
   ExpVar <- PCAData$sdev^2/sum(PCAData$sdev^2)
 
   if(VarThr<1){
     nDims <- max(min(which(cumsum(ExpVar) > VarThr)), 2)
-  } else {
-    nDims <- max(dim(PCAData$x))
   }
 
   Data <- PCAData$x[, 1:nDims]
 
 
   if(GraphType == 'Lasso') {
-
-    print("Lasso fitting")
-    print("Fitting initial circle")
-
-    # Step I - Construct the base circle
-
-    BasicCircData <- computeElasticPrincipalGraph(Data = Data[rownames(Data) %in% NonG0Cell,], NumNodes = 4,
-                                                  Method = 'CircleConfiguration', NodeStep = 1)
-
-    PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-    PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-    UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes) - 1
-
-    while(UsedNodes < InitStructNodes & PlanPerc > PlanVarLimitIC){
-
-      print("Expanding initial circle")
-
-      # Contiune to add node untill the circle remains planar
-
-      BasicCircData <- append(BasicCircData, computeElasticPrincipalGraph(Data = Data[rownames(Data) %in% NonG0Cell,],
-                                                                          NumNodes = UsedNodes + 1,
-                                                                          Method = 'CircleConfiguration',
-                                                                          NodesPositions = BasicCircData[[length(BasicCircData)]]$Nodes,
-                                                                          Edges = BasicCircData[[length(BasicCircData)]]$Edges))
-
-      UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes)
-
-      PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-    }
-
-    if(UseTree | ForceLasso){
-
-      print("Branching initial circle")
-
-      # Step II - Construct the initial tree
-
-      BasicCircData <- append(BasicCircData, computeElasticPrincipalGraph(Data = Data,
-                                                                          NumNodes = UsedNodes + 1,
-                                                                          Method = 'DefaultPrincipalTreeConfiguration',
-                                                                          NodesPositions = BasicCircData[[length(BasicCircData)]]$Nodes,
-                                                                          Edges = BasicCircData[[length(BasicCircData)]]$Edges))
-
-
-      PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-      UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes) - 1
-
-      while(UsedNodes < nNodes & PlanPerc > PlanVarLimit){
-
-        print("Keep Branching")
-
-        # Step IIa - keep constructing trees
-
-        BasicCircData <- append(BasicCircData, computeElasticPrincipalGraph(Data = Data,
-                                                                            NumNodes = UsedNodes + 1,
-                                                                            Method = 'DefaultPrincipalTreeConfiguration',
-                                                                            NodesPositions = BasicCircData[[length(BasicCircData)]]$Nodes,
-                                                                            Edges = BasicCircData[[length(BasicCircData)]]$Edges))
-
-
-        UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes)
-
-        PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-        PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-        Net <- ConstructGraph(Results = BasicCircData[[length(BasicCircData)]], DirectionMat = NULL, Thr = NULL)
-        if(max(igraph::degree(Net))>2){
-          break()
-        }
-      }
-
-    }
-
-    # Step III - Using curves
-
-    while(UsedNodes < nNodes & PlanPerc > PlanVarLimit){
-
-      print("Extending circle and branches")
-
-      BasicCircData <- append(BasicCircData, computeElasticPrincipalGraph(Data = Data,
-                                                                          NumNodes = nrow(BasicCircData[[length(BasicCircData)]]$Nodes)+1,
-                                                                          Method = 'CurveConfiguration',
-                                                                          NodesPositions = BasicCircData[[length(BasicCircData)]]$Nodes,
-                                                                          Edges = BasicCircData[[length(BasicCircData)]]$Edges))
-
-      Net <- ConstructGraph(Results = BasicCircData[[length(BasicCircData)]], DirectionMat = NULL, Thr = NULL)
-
-      PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-      UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes)
-
-      if(sum(igraph::degree(Net)>2)>1){
-
-        print("Multiple branches detected ... trying to select one")
-
-        # There are two branhces, this is no good ...
-        # Look for the biggest circle
-
-        CircSize <- 3
-
-        while(CircSize < igraph::vcount(Net)){
-
-          Template <- igraph::graph.ring(n = CircSize, directed = FALSE, mutual = FALSE, circular = TRUE)
-
-          CircSize <- CircSize + 1
-
-          CircleInData <- igraph::graph.get.subisomorphisms.vf2(Net, Template)
-
-          if(length(CircleInData)>0){
-            # We found the cicle
-
-            EndPoint <- igraph::V(Net)[igraph::degree(Net) == 1]
-            Branches <- igraph::V(Net)[igraph::degree(Net)>2]
-            DistMat <- igraph::distances(Net, EndPoint, Branches)
-
-            BranchesLen <- apply(DistMat, 1, min)
-
-            VertToRemove <- NULL
-
-            if(max(BranchesLen[-which.max(BranchesLen)] - max(BranchesLen)) <= -MinBranDiff){
-
-              print("Dominating brach found ... pruning the shortest one")
-
-              # There is a "dominating"" branch
-              ToKeep <- names(which.max(BranchesLen))
-              for(i in 1:nrow(DistMat)){
-
-                Source <- rownames(DistMat)[i]
-                if(ToKeep == Source){
-                  next()
-                }
-
-                Target <- names(which.min(DistMat[i,]))
-                VertToRemove <- c(VertToRemove, names(igraph::get.shortest.paths(Net, from = Target, to = Source)$vpath[[1]][-1]))
-              }
-
-              PrunedStruct <- BasicCircData[[length(BasicCircData)]]
-
-              NodesToRem <- as.integer(unlist(lapply(strsplit(VertToRemove, "V_"), "[[", 2)))
-              PrunedStruct$Nodes <- PrunedStruct$Nodes[-NodesToRem, ]
-              PrunedStruct$Edges <-
-                PrunedStruct$Edges[!(PrunedStruct$Edges[,1] %in% NodesToRem | PrunedStruct$Edges[,2] %in% NodesToRem), ]
-
-              for(VerVal in 1:max(PrunedStruct$Edges)){
-                if(any(PrunedStruct$Edges == VerVal)){
-                  next()
-                } else {
-                  PrunedStruct$Edges[PrunedStruct$Edges>VerVal] <-
-                    PrunedStruct$Edges[PrunedStruct$Edges>VerVal] - 1
-                }
-
-              }
-
-              PrunedStruct$Method <- "ManualPruning"
-
-              BasicCircData[[length(BasicCircData) + 1]] <- PrunedStruct
-
-              PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-              PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-              UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes)
-
-              break()
-
-            }
-
-
-          }
-
-
-        }
-
-      }
-
-    }
-
-    FitData <- BasicCircData
+    FitData <- FitLasso(Data, NonG0Cell, InitStructNodes, PlanVarLimitIC, PlanVarLimit, UseTree, ForceLasso, nNodes, MinBranDiff)
   }
-
-
-
-
-
 
 
   if(GraphType == 'Circle') {
-
-    print("Circle fitting")
-    print("Fitting initial circle")
-
-    # Step I - Construct the base circle
-
-    BasicCircData <- computeElasticPrincipalGraph(Data = Data[rownames(Data) %in% NonG0Cell,], NumNodes = 4,
-                                                  Method = 'CircleConfiguration', NodeStep = 1)
-
-    PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-    PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-    UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes) - 1
-
-    while(UsedNodes < InitStructNodes & PlanPerc > PlanVarLimitIC){
-
-      print("Expanding initial circle")
-
-      # Contiune to add node untill the circle remains planar
-
-      BasicCircData <- append(BasicCircData, computeElasticPrincipalGraph(Data = Data[rownames(Data) %in% NonG0Cell,],
-                                                                          NumNodes = UsedNodes + 1,
-                                                                          Method = 'CircleConfiguration',
-                                                                          NodesPositions = BasicCircData[[length(BasicCircData)]]$Nodes,
-                                                                          Edges = BasicCircData[[length(BasicCircData)]]$Edges))
-
-
-      UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes)
-
-      PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-      print(paste("Initial circle: Nodes = ", UsedNodes, "PercPlan = ", PlanPerc))
-
-    }
-
-    # Step II - Using curves
-
-    while(UsedNodes < nNodes & PlanPerc > PlanVarLimit){
-
-      print("Extending circle")
-
-      BasicCircData <- append(BasicCircData, computeElasticPrincipalGraph(Data = Data,
-                                                                          NumNodes = nrow(BasicCircData[[length(BasicCircData)]]$Nodes)+1,
-                                                                          Method = 'CurveConfiguration',
-                                                                          NodesPositions = BasicCircData[[length(BasicCircData)]]$Nodes,
-                                                                          Edges = BasicCircData[[length(BasicCircData)]]$Edges))
-
-
-      Net <- ConstructGraph(Results = BasicCircData[[length(BasicCircData)]], DirectionMat = NULL, Thr = NULL)
-
-      PCAStruct <- prcomp(BasicCircData[[length(BasicCircData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-      UsedNodes <- nrow(BasicCircData[[length(BasicCircData)]]$Nodes)
-
-      print(paste("Final circle: Nodes = ", UsedNodes, "PercPlan = ", PlanPerc))
-
-    }
-
-    FitData <- BasicCircData
+    FitData <- FitCircle(Data, NonG0Cell, InitStructNodes, PlanVarLimitIC, PlanVarLimit, nNodes)
   }
-
-
-
-
-
-
 
 
   if(GraphType == 'Line') {
-
-    print("Line fitting")
-    print("Fitting initial line")
-
-    # Step I - Construct the base circle
-
-    BasicLineData <- computeElasticPrincipalGraph(Data = Data[rownames(Data) %in% NonG0Cell,], NumNodes = 4,
-                                                  Method = 'CurveConfiguration', NodeStep = 1)
-
-    PCAStruct <- prcomp(BasicLineData[[length(BasicLineData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-    PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-    UsedNodes <- nrow(BasicLineData[[length(BasicLineData)]]$Nodes) - 1
-
-    while(UsedNodes < InitStructNodes & PlanPerc > PlanVarLimitIC){
-
-      print("Expanding initial line")
-
-      # Contiune to add node untill the circle remains planar
-
-      BasicLineData <- append(BasicLineData, computeElasticPrincipalGraph(Data = Data[rownames(Data) %in% NonG0Cell,],
-                                                                          NumNodes = UsedNodes + 1,
-                                                                          Method = 'CircleConfiguration',
-                                                                          NodesPositions = BasicLineData[[length(BasicLineData)]]$Nodes,
-                                                                          Edges = BasicLineData[[length(BasicLineData)]]$Edges))
-
-
-      UsedNodes <- nrow(BasicLineData[[length(BasicLineData)]]$Nodes)
-
-      PCAStruct <- prcomp(BasicLineData[[length(BasicLineData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-    }
-
-    # Step II - Using curves
-
-    while(UsedNodes < nNodes & PlanPerc > PlanVarLimit){
-
-      print("Extending line")
-
-      BasicLineData <- append(BasicLineData, computeElasticPrincipalGraph(Data = Data,
-                                                                          NumNodes = nrow(BasicLineData[[length(BasicLineData)]]$Nodes)+1,
-                                                                          Method = 'CurveConfiguration',
-                                                                          NodesPositions = BasicLineData[[length(BasicLineData)]]$Nodes,
-                                                                          Edges = BasicLineData[[length(BasicLineData)]]$Edges))
-
-
-      Net <- ConstructGraph(Results = BasicLineData[[length(BasicLineData)]], DirectionMat = NULL, Thr = NULL)
-
-      PCAStruct <- prcomp(BasicLineData[[length(BasicLineData)]]$Nodes, center = TRUE, scale. = FALSE, retx = TRUE)
-      PlanPerc <- sum(PCAStruct$sdev[1:2]^2)/sum(PCAStruct$sdev^2)
-
-      UsedNodes <- nrow(BasicLineData[[length(BasicLineData)]]$Nodes)
-
-    }
-
-    FitData <- BasicLineData
+    FitData <- FitLine(Data, NonG0Cell, InitStructNodes, PlanVarLimitIC, PlanVarLimit, nNodes)
   }
-
-
-
 
 
   CombData <- FitData[[length(FitData)]]
@@ -795,12 +512,31 @@ SelectGenesOnGraph <- function(DataSet,
     length(setdiff(UsedGenes[[length(UsedGenes) - 1]], UsedGenes[[length(UsedGenes)]]))
     length(UsedGenes[[length(UsedGenes)]])
 
-    Steps[[i]] <- ProjectAndCompute(DataSet = DataSet, GeneSet = UsedGenes[[i]], VarThr = VarThr, nNodes = nNodes,
-                                    Log = Log, Categories = Categories, Filter = Filter, OutThr = OutThr, PCAFilter = PCAFilter,
-                                    OutThrPCA = OutThrPCA, GraphType = GraphType, PlanVarLimit = PlanVarLimit, PlanVarLimitIC = PlanVarLimitIC,
-                                    MinBranDiff = MinBranDiff, InitStructNodes = InitStructNodes, ForceLasso = ForceLasso, EstProlif = EstProlif,
-                                    QuaThr = QuaThr, NonG0Cell = Steps[[1]]$NonG0Cell, DipPVThr = DipPVThr, MinProlCells = MinProlCells,
-                                    PCACenter = PCACenter, PCAProjCenter = PCAProjCenter, PlotDebug = PlotDebug, PlotIntermediate = PlotIntermediate)
+    Steps[[i]] <- ProjectAndCompute(DataSet = DataSet,
+                                    GeneSet = UsedGenes[[i]],
+                                    VarThr = VarThr,
+                                    nNodes = nNodes,
+                                    Log = Log,
+                                    Categories = Categories,
+                                    Filter = Filter,
+                                    OutThr = OutThr,
+                                    PCAFilter = PCAFilter,
+                                    OutThrPCA = OutThrPCA,
+                                    GraphType = GraphType,
+                                    PlanVarLimit = PlanVarLimit,
+                                    PlanVarLimitIC = PlanVarLimitIC,
+                                    MinBranDiff = MinBranDiff,
+                                    InitStructNodes = InitStructNodes,
+                                    ForceLasso = ForceLasso,
+                                    EstProlif = EstProlif,
+                                    QuaThr = QuaThr,
+                                    NonG0Cell = Steps[[1]]$NonG0Cell,
+                                    DipPVThr = DipPVThr,
+                                    MinProlCells = MinProlCells,
+                                    PCACenter = PCACenter,
+                                    PCAProjCenter = PCAProjCenter,
+                                    PlotDebug = PlotDebug,
+                                    PlotIntermediate = PlotIntermediate)
 
     i = i + 1
 
@@ -866,12 +602,31 @@ SelectGenesOnGraph <- function(DataSet,
 
     length(setdiff(UsedGenes[[i - 1]], UsedGenes[[i]]))
 
-    Steps[[i]] <- ProjectAndCompute(DataSet = DataSet, GeneSet = UsedGenes[[i]], VarThr = VarThr, nNodes = nNodes,
-                                    Log = Log, Categories = Categories, Filter = Filter, OutThr = OutThr, PCAFilter = PCAFilter,
-                                    OutThrPCA = OutThrPCA, GraphType = GraphType, PlanVarLimit = PlanVarLimit, PlanVarLimitIC = PlanVarLimitIC,
-                                    MinBranDiff = MinBranDiff, InitStructNodes = InitStructNodes, ForceLasso = ForceLasso, EstProlif = EstProlif,
-                                    QuaThr = QuaThr, NonG0Cell = Steps[[1]]$NonG0Cell, DipPVThr = DipPVThr, MinProlCells = MinProlCells,
-                                    PCACenter = PCACenter, PCAProjCenter = PCAProjCenter, PlotDebug = PlotDebug, PlotIntermediate = PlotIntermediate)
+    Steps[[i]] <- ProjectAndCompute(DataSet = DataSet,
+                                    GeneSet = UsedGenes[[i]],
+                                    VarThr = VarThr,
+                                    nNodes = nNodes,
+                                    Log = Log,
+                                    Categories = Categories,
+                                    Filter = Filter,
+                                    OutThr = OutThr,
+                                    PCAFilter = PCAFilter,
+                                    OutThrPCA = OutThrPCA,
+                                    GraphType = GraphType,
+                                    PlanVarLimit = PlanVarLimit,
+                                    PlanVarLimitIC = PlanVarLimitIC,
+                                    MinBranDiff = MinBranDiff,
+                                    InitStructNodes = InitStructNodes,
+                                    ForceLasso = ForceLasso,
+                                    EstProlif = EstProlif,
+                                    QuaThr = QuaThr,
+                                    NonG0Cell = Steps[[1]]$NonG0Cell,
+                                    DipPVThr = DipPVThr,
+                                    MinProlCells = MinProlCells,
+                                    PCACenter = PCACenter,
+                                    PCAProjCenter = PCAProjCenter,
+                                    PlotDebug = PlotDebug,
+                                    PlotIntermediate = PlotIntermediate)
 
     i = i + 1
 

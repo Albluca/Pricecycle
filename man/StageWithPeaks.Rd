@@ -4,9 +4,10 @@
 \alias{StageWithPeaks}
 \title{Title}
 \usage{
-StageWithPeaks(DataStruct, ProcStruct, StageInfo, ComputeG0 = TRUE,
-  MinNodes = 2, FiltMax = 0.2, Thr = 0.9, QuantSel = 0.75,
-  G0Level = 1, Mode = 1, Title = "")
+StageWithPeaks(DataStruct, ProcStruct, StageInfo.UP, StageInfo.DOWN,
+  ComputeG0 = TRUE, CCGenes = NULL, MinNodes = 2, FiltMax = 0.2,
+  Thr = 0.9, QuantSel = 0.75, MedianCVThr = 1, G0Level = 0.6,
+  Mode = 1, Title = "")
 }
 \arguments{
 \item{Mode}{}

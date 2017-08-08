@@ -5,7 +5,7 @@
 \title{Title}
 \usage{
 PlotOnPseudotime(WorkStruct, Expression, Name = "", gName, SpanVal = 0.3,
-  CatOrder = NULL)
+  CatOrder = NULL, legend.position = "bottom")
 }
 \arguments{
 \item{CatOrder}{}

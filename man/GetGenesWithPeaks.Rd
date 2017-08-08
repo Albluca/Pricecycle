@@ -5,8 +5,8 @@
 \title{Title}
 \usage{
 GetGenesWithPeaks(DataStruct, ProcStruct, AllGenes = FALSE, MinNodes = 2,
-  FiltMax = 0.2, Thr = 0.9, QuantSel = 0.75, SinglePeack = FALSE,
-  Mode = "UP")
+  FiltMax = 0.2, Thr = 0.9, QuantSel = 0.75, MedianCVThr = 1,
+  StagesNames = c("G1", "S", "G2"))
 }
 \arguments{
 \item{SinglePeack}{}
