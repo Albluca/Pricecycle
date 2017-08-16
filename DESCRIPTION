@@ -13,6 +13,7 @@ Imports:
     igraph,
     scater,
     readr,
-    magrittr
+    magrittr,
+    parallel
 VignetteBuilder: knitr
 RoxygenNote: 6.0.1

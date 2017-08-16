@@ -425,7 +425,9 @@ SelectGenesOnGraph <- function(DataSet,
                                GeneSelMode = "CV",
                                SelGeneThr = NULL,
                                RatExp = .5,
-                               SelGeneAggFun = min) {
+                               SelGeneAggFun = min,
+                               Span = .5,
+                               nCores = 1) {
 
   # Construct the initial Principal graph
 
@@ -487,7 +489,9 @@ SelectGenesOnGraph <- function(DataSet,
                             Net = Steps[[i-1]]$Net[[length(Steps[[i-1]]$Net)]],
                             PriGraph = Steps[[i-1]]$PrinGraph,
                             Proj = Steps[[i-1]]$ProjPoints[[length(Steps[[i-1]]$ProjPoints)]],
-                            AggFun = SelGeneAggFun)
+                            AggFun = SelGeneAggFun,
+                            Span = Span,
+                            nCores = nCores)
     tictoc::toc()
 
     if(i == 1 & is.null(SelGeneThr)){
@@ -571,7 +575,9 @@ SelectGenesOnGraph <- function(DataSet,
                               Net = Steps[[i-1]]$Net[[length(Steps[[i-1]]$Net)]],
                               PriGraph = Steps[[i-1]]$PrinGraph,
                               Proj = Steps[[i-1]]$ProjPoints[[length(Steps[[i-1]]$ProjPoints)]],
-                              AggFun = SelGeneAggFun)
+                              AggFun = SelGeneAggFun,
+                              Span = Span,
+                              nCores = nCores)
     } else {
       GenesThr <- SelectGenes(TaxVect = TaxVect,
                               ExpMat = DataSet[rowSums(DataSet>0) > ncol(DataSet)*RatExp,
@@ -580,7 +586,9 @@ SelectGenesOnGraph <- function(DataSet,
                               Net = Steps[[i-1]]$Net[[length(Steps[[i-1]]$Net)]],
                               PriGraph = Steps[[i-1]]$PrinGraph,
                               Proj = Steps[[i-1]]$ProjPoints[[length(Steps[[i-1]]$ProjPoints)]],
-                              AggFun = SelGeneAggFun)
+                              AggFun = SelGeneAggFun,
+                              Span = Span,
+                              nCores = nCores)
     }
     tictoc::toc()
 

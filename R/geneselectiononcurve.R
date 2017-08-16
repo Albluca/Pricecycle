@@ -19,7 +19,9 @@ SelectGenes <- function(TaxVect,
                         Net = NULL,
                         PriGraph = NULL,
                         Proj = NULL,
-                        AggFun = min) {
+                        AggFun = min,
+                        Span = .75,
+                        nCores = 1) {
 
   if(Mode == "CV" | is.null(Net) | is.null(PriGraph) | is.null(Proj)){
 
@@ -58,14 +60,50 @@ SelectGenes <- function(TaxVect,
             OrderedPoints$PositionOnPath + sum(OrderedPoints$PathLen))
     NodePoints <- cumsum(OrderedPoints$PathLen)
 
-    AllFit <- apply(ExpMat, 2, function(x){
+    Selected <- ExtPT >= 0 - sum(OrderedPoints$PathLen)*Span &
+      ExtPT <= sum(OrderedPoints$PathLen) + sum(OrderedPoints$PathLen)*Span
 
-      LocDF <- data.frame(Exp = rep(x, 3), PT = ExtPT)
+    ExtPT <- ExtPT[Selected]
 
-      LOE <- loess(Exp ~ PT, LocDF)
+    FitFun <- function(x){
+
+      LocDF <- data.frame(Exp = rep(x, 3)[Selected], PT = ExtPT)
+
+      LOE <- loess(Exp ~ PT, LocDF, span = Span)
       predict(LOE, data.frame(PT = NodePoints), se = TRUE)
 
-    })
+    }
+
+    if(nCores <= 1){
+      AllFit <- apply(ExpMat, 2, FitFun)
+
+      print(paste("Computing loess smoothers on", ncol(ExpMat), "genes and", sum(Selected), "pseudotime points on a single processor. This may take a while ..."))
+
+    } else {
+
+      no_cores <- parallel::detectCores()
+
+      if(nCores > no_cores){
+        nCores <- no_cores
+        print(paste("Too many cores selected!", nCores, "will be used"))
+      }
+
+      if(nCores == no_cores){
+        print("Using all the cores available. This will likely render the system unresponsive untill the operation has concluded ...")
+      }
+
+      print(paste("Computing loess smoothers on", ncol(ExpMat), "genes and", sum(Selected), "pseudotime points using", nCores, "processors. This may take a while ..."))
+
+      cl <- parallel::makeCluster(nCores)
+
+      parallel::clusterExport(cl=cl, varlist=c("Selected", "ExtPT", "NodePoints", "Span"),
+                              envir = environment())
+
+      AllFit <- parallel::parApply(cl, ExpMat, 2, FitFun)
+
+      parallel::stopCluster(cl)
+
+    }
 
     RetVal <- lapply(AllFit, function(x){x$se.fit/x$fit}) %>%
       sapply(., AggFun)
