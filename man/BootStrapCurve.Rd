@@ -4,9 +4,10 @@
 \alias{BootStrapCurve}
 \title{Title}
 \usage{
-BootStrapCurve(TargetStruct, InitStructNodes = 15, PlanVarLimit = 0.9,
-  PlanVarLimitIC = NULL, nNodes = 30, ForceLasso = FALSE,
-  MinBranDiff = 2, nSamples = 10, CellPerc = 0.95, MinProlCells = 10)
+BootStrapCurve(TargetStruct, InitStructNodes = 15, PlanVarLimit = 0.85,
+  PlanVarLimitIC = 0.9, nNodes = 40, ForceLasso = FALSE,
+  MinBranDiff = 2, nSamples = 10, CellPerc = 0.95, MinProlCells = 10,
+  VarThr = 1, Cores = 1)
 }
 \arguments{
 \item{MinProlCells}{}

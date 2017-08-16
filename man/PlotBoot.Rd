@@ -4,12 +4,10 @@
 \alias{PlotBoot}
 \title{Plot bootstrapped data}
 \usage{
-PlotBoot(SampledStruct, TargetStruct, PoitMult = 2)
+PlotBoot(SampledStruct, TargetStruct, PoitMult = 1.5, Title = "")
 }
 \arguments{
-\item{RefGraphStruct}{}
-
-\item{x}{}
+\item{TargetStruct}{}
 }
 \description{
 Plot bootstrapped data

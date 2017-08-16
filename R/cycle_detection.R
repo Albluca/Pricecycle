@@ -279,7 +279,6 @@ ProjectAndCompute <- function(DataSet,
                                   Graph = Net[[i]], TaxonList = TaxonList[[i]], LayOut =, Main = "Pincipal graph")
     }
 
-
     PCAPrGraph[[i]] <-  prcomp(FitData[[i]]$Nodes, retx = TRUE, center = FALSE, scale. = FALSE)
 
     # if(FitData[[i]]$Method == "CircleConfiguration"){
@@ -335,7 +334,8 @@ ProjectAndCompute <- function(DataSet,
 
   return(list(Data = Data, FiltExp = DataMat, Categories = Categories, PrinGraph = CombData,
               IntGrahs = FitData, Net = Net, TaxonList = TaxonList, PCAData = PCAData,
-              nDims = nDims, ProjPoints = ProjPoints, PCAPrGraph = PCAPrGraph, NonG0Cell = NonG0Cell))
+              nDims = nDims, ProjPoints = ProjPoints, PCAPrGraph = PCAPrGraph, NonG0Cell = NonG0Cell,
+              ExpVar = ExpVar))
 }
 
 
@@ -421,7 +421,11 @@ SelectGenesOnGraph <- function(DataSet,
                                AddGenePerc = 5,
                                SelThr1 = .95,
                                SelThr2 = .99,
-                               MadsThr =  1) {
+                               MadsThr =  1,
+                               GeneSelMode = "CV",
+                               SelGeneThr = NULL,
+                               RatExp = .5,
+                               SelGeneAggFun = min) {
 
   # Construct the initial Principal graph
 
@@ -462,32 +466,9 @@ SelectGenesOnGraph <- function(DataSet,
   CONVERGED <- FALSE
   i = 2
 
-  DoStuff <- function(TaxVect){
-
-    # SelCell <- intersect(Steps[[1]]$NonG0Cell, names(TaxVect))
-    SelCell <- names(TaxVect)
-
-    GeneExprMat.DF.Split <- split(GeneExprMat.DF[SelCell, ], TaxVect[SelCell])
-
-    GeneExprMat.DF.Split.Mean <- lapply(GeneExprMat.DF.Split, colMeans)
-
-    GeneExprMat.DF.MeanRemoved <-
-      lapply(as.list(1:length(GeneExprMat.DF.Split)), function(i){
-        apply(GeneExprMat.DF.Split[[i]], 2, sd)/GeneExprMat.DF.Split.Mean[[i]]
-      })
-
-    GeneExprMat.DF.MeanRemoved.All <- NULL
-    for(i in 1:length(GeneExprMat.DF.MeanRemoved)){
-      GeneExprMat.DF.MeanRemoved.All <- rbind(GeneExprMat.DF.MeanRemoved.All, GeneExprMat.DF.MeanRemoved[[i]])
-    }
-
-    return(apply(abs(GeneExprMat.DF.MeanRemoved.All), 2, mean, na.rm = TRUE))
-
-  }
-
-
-
   while(!CONVERGED){
+
+    print("Phase I - Contraction")
 
     TaxList <- Steps[[i-1]]$TaxonList[[length(Steps[[i-1]]$TaxonList)]]
     TaxVect <- rep(NA, nrow(Steps[[i-1]]$Data))
@@ -497,20 +478,33 @@ SelectGenesOnGraph <- function(DataSet,
       TaxVect[ TaxList[[j]] ] <<- j
     })
 
-    GeneExprMat.DF <- data.frame(t(DataSet[UsedGenes[[i-1]], ]), row.names = colnames(DataSet))
-    colnames(GeneExprMat.DF) <- rownames(DataSet[UsedGenes[[i-1]], ])
+    print("Selecting genes for restriction set")
 
-    Base <- DoStuff(TaxVect)
-    Base <- Base[is.finite(Base)]
+    tictoc::tic()
+    GenesThr <- SelectGenes(TaxVect = TaxVect,
+                            ExpMat = Steps[[i-1]]$FiltExp,
+                            Mode = GeneSelMode,
+                            Net = Steps[[i-1]]$Net[[length(Steps[[i-1]]$Net)]],
+                            PriGraph = Steps[[i-1]]$PrinGraph,
+                            Proj = Steps[[i-1]]$ProjPoints[[length(Steps[[i-1]]$ProjPoints)]],
+                            AggFun = SelGeneAggFun)
+    tictoc::toc()
 
-    if(i == 2){
-      Thr <- median(Base) + MadsThr*mad(Base)
+    if(i == 1 & is.null(SelGeneThr)){
+      SelGeneThr <- median(GenesThr) + MadsThr*mad(GenesThr)
     }
 
-    UsedGenes[[i]] <- names(which(Base < Thr))
+    UsedGenes[[i]] <- names(which(GenesThr < SelGeneThr))
 
-    length(setdiff(UsedGenes[[length(UsedGenes) - 1]], UsedGenes[[length(UsedGenes)]]))
-    length(UsedGenes[[length(UsedGenes)]])
+    print(
+      paste(
+        length(setdiff(UsedGenes[[length(UsedGenes) - 1]], UsedGenes[[length(UsedGenes)]])),
+        "genes removed /",
+        length(UsedGenes[[length(UsedGenes)]]),
+        "genes are now selected"
+        )
+      )
+
 
     Steps[[i]] <- ProjectAndCompute(DataSet = DataSet,
                                     GeneSet = UsedGenes[[i]],
@@ -546,8 +540,6 @@ SelectGenesOnGraph <- function(DataSet,
 
   }
 
-
-
   StageIEnd <- i
 
   # Extend the geneset by including other genes that are closer to the original circle
@@ -555,6 +547,8 @@ SelectGenesOnGraph <- function(DataSet,
   CONVERGED2 <- FALSE
 
   while(!CONVERGED2){
+
+    print("Phase II - Expansion")
 
     TaxList <- Steps[[i-1]]$TaxonList[[length(Steps[[i-1]]$TaxonList)]]
     TaxVect <- rep(NA, nrow(Steps[[i-1]]$Data))
@@ -566,41 +560,50 @@ SelectGenesOnGraph <- function(DataSet,
 
     SelGenes <- rownames(DataSet)
 
-    GeneExprMat.DF <- data.frame(t(DataSet[SelGenes, ]))
-    colnames(GeneExprMat.DF) <- rownames(DataSet[SelGenes, ])
+    print("Selecting genes for expansion set")
 
-    DoStuff <- function(TaxVect){
-
-      # SelCell <- intersect(Steps[[1]]$NonG0Cell, names(TaxVect))
-      SelCell <- names(TaxVect)
-
-      GeneExprMat.DF.Split <- split(GeneExprMat.DF[SelCell, ], TaxVect[SelCell])
-
-      GeneExprMat.DF.Split.Mean <- lapply(GeneExprMat.DF.Split, colMeans)
-
-      GeneExprMat.DF.MeanRemoved <-
-        lapply(as.list(1:length(GeneExprMat.DF.Split)), function(i){
-          apply(GeneExprMat.DF.Split[[i]], 2, sd)/GeneExprMat.DF.Split.Mean[[i]]
-        })
-
-      GeneExprMat.DF.MeanRemoved.All <- NULL
-      for(i in 1:length(GeneExprMat.DF.MeanRemoved)){
-        GeneExprMat.DF.MeanRemoved.All <- rbind(GeneExprMat.DF.MeanRemoved.All, GeneExprMat.DF.MeanRemoved[[i]])
-      }
-
-      return(apply(abs(GeneExprMat.DF.MeanRemoved.All), 2, mean, na.rm = TRUE))
-
+    tictoc::tic()
+    if(Log){
+      GenesThr <- SelectGenes(TaxVect = TaxVect,
+                              ExpMat = log10(t(DataSet[rowSums(DataSet>0) > ncol(DataSet)*RatExp,
+                                                       colnames(DataSet) %in% names(TaxVect)])+1),
+                              Mode = GeneSelMode,
+                              Net = Steps[[i-1]]$Net[[length(Steps[[i-1]]$Net)]],
+                              PriGraph = Steps[[i-1]]$PrinGraph,
+                              Proj = Steps[[i-1]]$ProjPoints[[length(Steps[[i-1]]$ProjPoints)]],
+                              AggFun = SelGeneAggFun)
+    } else {
+      GenesThr <- SelectGenes(TaxVect = TaxVect,
+                              ExpMat = DataSet[rowSums(DataSet>0) > ncol(DataSet)*RatExp,
+                                               colnames(DataSet) %in% names(TaxVect)],
+                              Mode = GeneSelMode,
+                              Net = Steps[[i-1]]$Net[[length(Steps[[i-1]]$Net)]],
+                              PriGraph = Steps[[i-1]]$PrinGraph,
+                              Proj = Steps[[i-1]]$ProjPoints[[length(Steps[[i-1]]$ProjPoints)]],
+                              AggFun = SelGeneAggFun)
     }
+    tictoc::toc()
 
-    Base <- DoStuff(TaxVect)
-    Base <- Base[is.finite(Base)]
+    #
+    # GeneExprMat.DF <- data.frame(t(DataSet[SelGenes, ]))
+    # colnames(GeneExprMat.DF) <- rownames(DataSet[SelGenes, ])
+    #
+    #
 
-    AddGenes <- Base[order(Base)[1:round(AddGenePerc*length(UsedGenes[[i-1]])/100)]]
-    AddGenes <- AddGenes[AddGenes < Thr]
 
+    AddGenes <- sort(GenesThr, decreasing = TRUE)[1:round(AddGenePerc*length(UsedGenes[[i-1]])/100)]
+    AddGenes <- AddGenes[AddGenes < SelGeneThr]
     UsedGenes[[i]] <- union(names(AddGenes), UsedGenes[[i-1]])
 
-    length(setdiff(UsedGenes[[i - 1]], UsedGenes[[i]]))
+
+    print(
+      paste(
+        length(setdiff(UsedGenes[[length(UsedGenes)]], UsedGenes[[length(UsedGenes) - 1]])),
+        "genes added /",
+        length(UsedGenes[[length(UsedGenes)]]),
+        "genes are now selected"
+      )
+    )
 
     Steps[[i]] <- ProjectAndCompute(DataSet = DataSet,
                                     GeneSet = UsedGenes[[i]],

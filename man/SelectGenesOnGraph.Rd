@@ -12,7 +12,8 @@ SelectGenesOnGraph(DataSet, StartSet, VarThr = 0.99, nNodes = 40,
   QuaThr = 0.5, NonG0Cell = NULL, DipPVThr = 1e-04, MinProlCells = 50,
   PCACenter = TRUE, PCAProjCenter = TRUE, PlotDebug = FALSE,
   PlotIntermediate = FALSE, AddGenePerc = 5, SelThr1 = 0.95,
-  SelThr2 = 0.99, MadsThr = 1)
+  SelThr2 = 0.99, MadsThr = 1, GeneSelMode = "CV", SelGeneThr = NULL,
+  RatExp = 0.5)
 }
 \arguments{
 \item{MadsThr}{}
